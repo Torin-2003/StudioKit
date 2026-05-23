@@ -6,7 +6,6 @@ Run from the StudioKit root directory:
 from setuptools import setup, Extension
 from Cython.Build import cythonize
 import sys
-import os
 
 # Files to compile. Paths are relative to the StudioKit root.
 TARGETS = [
