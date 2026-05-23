@@ -19,7 +19,7 @@ import db as _db
 # Config / constants
 # ─────────────────────────────────────────────────────────────────
 
-_HC_CONFIG_FILE = Path("output/hypercutter_config.json")
+_HC_CONFIG_FILE = Path("output/hypecutter_config.json")
 
 _RANGE_PRESETS: dict[str, tuple[int, int]] = {
     "Short (Under 30s)": (5, 30),
