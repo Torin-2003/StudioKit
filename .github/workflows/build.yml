@@ -30,16 +30,17 @@ jobs:
           cp $(which ffmpeg) ffmpeg_bin/ffmpeg
           cp $(which ffprobe) ffmpeg_bin/ffprobe
 
-      - name: Obfuscate with pyarmor
+      - name: Obfuscate with pyarmor (entry + license files only)
         run: |
           pyarmor gen --output obfuscated \
             app.py run_app.py \
-            hypecutter/ scene_manager/ \
             license_client.py license_guard.py \
             heartbeat.py paths.py config_client.py db.py
 
       - name: Copy non-obfuscated assets
         run: |
+          cp -r hypecutter obfuscated/hypecutter
+          cp -r scene_manager obfuscated/scene_manager
           cp -r license obfuscated/license
           cp -r ffmpeg_bin obfuscated/ffmpeg_bin
           cp StudioKit.spec obfuscated/
@@ -87,16 +88,17 @@ jobs:
           copy "C:\ProgramData\chocolatey\bin\ffmpeg.exe" ffmpeg_bin\ffmpeg.exe
           copy "C:\ProgramData\chocolatey\bin\ffprobe.exe" ffmpeg_bin\ffprobe.exe
 
-      - name: Obfuscate with pyarmor
+      - name: Obfuscate with pyarmor (entry + license files only)
         run: |
           pyarmor gen --output obfuscated `
             app.py run_app.py `
-            hypecutter/ scene_manager/ `
             license_client.py license_guard.py `
             heartbeat.py paths.py config_client.py db.py
 
       - name: Copy non-obfuscated assets
         run: |
+          xcopy /E /I hypecutter obfuscated\hypecutter
+          xcopy /E /I scene_manager obfuscated\scene_manager
           xcopy /E /I license obfuscated\license
           xcopy /E /I ffmpeg_bin obfuscated\ffmpeg_bin
           copy StudioKit.spec obfuscated\
