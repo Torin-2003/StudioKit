@@ -12,3 +12,9 @@ build/
 ffmpeg_bin/
 obfuscated/
 license/license.json
+
+# Cython build artifacts
+*.so
+*.pyd
+*.c
+*.egg-info/
