@@ -1,19 +1,46 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
+import glob
 import os
+import sys
 
+# ── Compiled Cython extensions (.pyd on Windows, .so on Mac/Linux) ────────────
+def collect_cython_extensions():
+    """Collect all compiled Cython .pyd/.so files as binaries."""
+    binaries = []
+    ext = ".pyd" if sys.platform == "win32" else ".so"
+    patterns = [
+        f"*{ext}",
+        f"hypecutter/*{ext}",
+        f"scene_manager/*{ext}",
+    ]
+    for pattern in patterns:
+        for path in glob.glob(pattern):
+            # dest is the directory inside the bundle
+            dest = os.path.dirname(path) or "."
+            binaries.append((path, dest))
+    return binaries
+
+# ── Data files ────────────────────────────────────────────────────────────────
 datas = [
     ("app.py", "."),
     ("run_app.py", "."),
-    ("hypecutter/", "hypecutter/"),
-    ("scene_manager/", "scene_manager/"),
-    ("license_client.py", "."),
-    ("license_guard.py", "."),
-    ("heartbeat.py", "."),
+    # UI files (not compiled — Streamlit UI can't be Cython compiled)
+    ("hypecutter/ui.py", "hypecutter/"),
+    ("hypecutter/__init__.py", "hypecutter/"),
+    # Scene manager UI + submodules (ui.py not compiled; others are compiled)
+    ("scene_manager/ui.py", "scene_manager/"),
+    ("scene_manager/__init__.py", "scene_manager/"),
+    ("scene_manager/downloader.py", "scene_manager/"),
+    ("scene_manager/metadata.py", "scene_manager/"),
+    ("scene_manager/splitter.py", "scene_manager/"),
+    # License files (compiled; only the license/ key directory needed as data)
+    ("license/", "license/"),
+    # Config entry points (not compiled)
     ("paths.py", "."),
     ("config_client.py", "."),
     ("db.py", "."),
-    ("license/", "license/"),
+    ("heartbeat.py", "."),
 ]
 
 if os.path.exists("ffmpeg_bin"):
@@ -31,15 +58,19 @@ datas += copy_metadata("scenedetect")
 datas += copy_metadata("opencv-python")
 datas += copy_metadata("Pillow")
 
+# ── Hidden imports ────────────────────────────────────────────────────────────
 hiddenimports = collect_submodules("streamlit")
 hiddenimports += collect_submodules("altair")
 hiddenimports += collect_submodules("scenedetect")
 hiddenimports += collect_submodules("cv2")
 
+# ── Compiled extensions ───────────────────────────────────────────────────────
+extra_binaries = collect_cython_extensions()
+
 a = Analysis(
     ["run_app.py"],
     pathex=[],
-    binaries=[],
+    binaries=extra_binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
