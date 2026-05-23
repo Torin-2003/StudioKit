@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+downloads/
+output/
+data/
+venv/
+.venv/
+dist/
+build/
+ffmpeg_bin/
+obfuscated/
+license/license.json
