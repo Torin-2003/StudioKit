@@ -64,6 +64,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+st.markdown(
+    "<style>#MainMenu, footer, header {visibility: hidden;}</style>",
+    unsafe_allow_html=True,
+)
+
 # ── Sidebar: tool switcher + license status ───────────────────────────────────
 with st.sidebar:
     st.title("🎬 StudioKit")

@@ -566,14 +566,18 @@ def render():
 
         st.divider()
 
-        # ── Font ─────────────────────────────────────────────────
-        st.subheader("🔤 CJK Font (Docker)")
-        font_path_input = st.text_input(
-            "Font file path",
-            value=st.session_state.hc_cfg_font_path,
-            key="hc_sb_font_path",
-            help="Docker container path. Clear to use default system font.",
-        )
+        # ── Font (Docker only) ────────────────────────────────────
+        _in_docker = os.path.exists("/.dockerenv")
+        if _in_docker:
+            st.subheader("🔤 CJK Font (Docker)")
+            font_path_input = st.text_input(
+                "Font file path",
+                value=st.session_state.hc_cfg_font_path,
+                key="hc_sb_font_path",
+                help="Docker container path. Clear to use default system font.",
+            )
+        else:
+            font_path_input = st.session_state.hc_cfg_font_path
 
         st.divider()
 
