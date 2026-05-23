@@ -64,9 +64,16 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── License status in sidebar ─────────────────────────────────────────────────
+# ── Sidebar: tool switcher + license status ───────────────────────────────────
 with st.sidebar:
     st.title("🎬 StudioKit")
+    st.divider()
+    _tool = st.radio(
+        "Tool",
+        ["✂️ HypeCutter", "🎬 Scene Manager"],
+        label_visibility="collapsed",
+        key="active_tool",
+    )
     st.divider()
     if _DEV_MODE:
         st.caption("🛠️ Dev Mode — license bypass active")
@@ -86,15 +93,11 @@ with st.sidebar:
             st.caption(f"Plan: **{_plan}**  |  Machine bound")
         else:
             st.warning("⚠️ No license")
-    st.divider()
 
-# ── Tool tabs ─────────────────────────────────────────────────────────────────
-tab_hc, tab_sm = st.tabs(["✂️ HypeCutter", "🎬 Scene Manager"])
-
-with tab_hc:
+# ── Render selected tool ──────────────────────────────────────────────────────
+if _tool == "✂️ HypeCutter":
     from hypecutter.ui import render as _render_hc
     _render_hc()
-
-with tab_sm:
+else:
     from scene_manager.ui import render as _render_sm
     _render_sm()
