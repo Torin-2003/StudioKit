@@ -1,0 +1,29 @@
+# Streamlit
+streamlit>=1.35.0
+
+# Downloader
+yt-dlp>=2024.5.1
+
+# Transcription
+faster-whisper>=1.0.0
+
+# AI providers
+openai>=1.30.0
+anthropic>=0.28.0
+
+# Video processing
+moviepy>=1.0.3
+imageio>=2.34.0
+imageio-ffmpeg>=0.4.9
+numpy>=1.26.0
+
+# Scene detection (Scene Manager)
+scenedetect[opencv]>=0.6.3
+opencv-python>=4.9.0
+Pillow>=10.0.0
+
+# Utilities
+requests>=2.31.0
+tqdm>=4.66.0
+cryptography>=41.0.0
+ffmpeg-python>=0.2.0
