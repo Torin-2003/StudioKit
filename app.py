@@ -65,7 +65,7 @@ st.set_page_config(
 )
 
 st.markdown(
-    "<style>#MainMenu, footer, header {visibility: hidden;}</style>",
+    "<style>#MainMenu, footer {visibility: hidden;} footer {display: none;}</style>",
     unsafe_allow_html=True,
 )
 
