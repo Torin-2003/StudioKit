@@ -3,7 +3,7 @@ import shutil
 import json
 from pathlib import Path
 from openai import OpenAI
-from metadata import (
+from scene_manager.metadata import (
     list_existing_folders,
     load_folder_metadata,
     save_folder_metadata,
