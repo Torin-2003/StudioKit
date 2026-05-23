@@ -25,7 +25,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install pyinstaller pyarmor
+          pip install pyinstaller cython setuptools
 
       - name: Bundle FFmpeg
         run: |
@@ -33,37 +33,28 @@ jobs:
           cp $(which ffmpeg) ffmpeg_bin/ffmpeg
           cp $(which ffprobe) ffmpeg_bin/ffprobe
 
-      - name: Obfuscate with pyarmor (entry + license files only)
-        run: |
-          pyarmor gen --output obfuscated \
-            app.py run_app.py \
-            license_client.py license_guard.py \
-            heartbeat.py paths.py config_client.py db.py
+      - name: Compile Cython extensions
+        run: python build_cython.py build_ext --inplace
 
-      - name: Copy non-obfuscated assets
+      - name: Verify compiled extensions exist
         run: |
-          cp -r hypecutter obfuscated/hypecutter
-          cp -r scene_manager obfuscated/scene_manager
-          cp -r license obfuscated/license
-          cp -r ffmpeg_bin obfuscated/ffmpeg_bin
-          cp StudioKit.spec obfuscated/
-          cp requirements.txt obfuscated/
+          ls hypecutter/*.so || ls hypecutter/*.pyd
+          ls *.so || ls *.pyd
+          ls scene_manager/*.so || ls scene_manager/*.pyd
 
       - name: Build Mac app
-        run: |
-          cd obfuscated
-          pyinstaller StudioKit.spec
+        run: pyinstaller StudioKit.spec
 
       - name: Zip Mac app
         run: |
-          cd obfuscated/dist
+          cd dist
           zip -r StudioKit-mac.zip StudioKit.app
 
       - name: Upload Mac artifact
         uses: actions/upload-artifact@v4
         with:
           name: StudioKit-mac
-          path: obfuscated/dist/StudioKit-mac.zip
+          path: dist/StudioKit-mac.zip
 
   build-windows:
     runs-on: windows-latest
@@ -83,7 +74,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          pip install pyinstaller pyarmor
+          pip install pyinstaller cython setuptools
 
       - name: Bundle FFmpeg
         run: |
@@ -91,35 +82,26 @@ jobs:
           copy "C:\ProgramData\chocolatey\bin\ffmpeg.exe" ffmpeg_bin\ffmpeg.exe
           copy "C:\ProgramData\chocolatey\bin\ffprobe.exe" ffmpeg_bin\ffprobe.exe
 
-      - name: Obfuscate with pyarmor (entry + license files only)
-        run: |
-          pyarmor gen --output obfuscated `
-            app.py run_app.py `
-            license_client.py license_guard.py `
-            heartbeat.py paths.py config_client.py db.py
+      - name: Compile Cython extensions
+        run: python build_cython.py build_ext --inplace
 
-      - name: Copy non-obfuscated assets
+      - name: Verify compiled extensions exist
         run: |
-          xcopy /E /I hypecutter obfuscated\hypecutter
-          xcopy /E /I scene_manager obfuscated\scene_manager
-          xcopy /E /I license obfuscated\license
-          xcopy /E /I ffmpeg_bin obfuscated\ffmpeg_bin
-          copy StudioKit.spec obfuscated\
-          copy requirements.txt obfuscated\
+          dir hypecutter\*.pyd
+          dir *.pyd
+          dir scene_manager\*.pyd
 
       - name: Build Windows exe
-        run: |
-          cd obfuscated
-          pyinstaller StudioKit.spec
+        run: pyinstaller StudioKit.spec
 
       - name: Zip Windows exe
-        run: Compress-Archive -Path obfuscated\dist\StudioKit -DestinationPath obfuscated\dist\StudioKit-windows.zip
+        run: Compress-Archive -Path dist\StudioKit -DestinationPath dist\StudioKit-windows.zip
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: StudioKit-windows
-          path: obfuscated\dist\StudioKit-windows.zip
+          path: dist\StudioKit-windows.zip
 
   release:
     needs: [build-mac, build-windows]
