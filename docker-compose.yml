@@ -1,0 +1,29 @@
+services:
+  studiokit:
+    build: .
+    image: studiokit:latest
+    container_name: studiokit
+    ports:
+      - "8601:8501"
+    volumes:
+      - ./app.py:/app/app.py
+      - ./hypecutter/:/app/hypecutter/
+      - ./scene_manager/:/app/scene_manager/
+      - ./license_client.py:/app/license_client.py
+      - ./license_guard.py:/app/license_guard.py
+      - ./heartbeat.py:/app/heartbeat.py
+      - ./paths.py:/app/paths.py
+      - ./config_client.py:/app/config_client.py
+      - ./db.py:/app/db.py
+      - ./license:/app/license
+      - ./downloads:/app/downloads
+      - ./output:/app/output
+      - ./data:/app/data
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - WHISPER_MODEL=${WHISPER_MODEL:-base}
+      - HOST_OUTPUT_PATH=${HOST_OUTPUT_PATH:-}
+      - STUDIOKIT_DEV=${STUDIOKIT_DEV:-}
+    restart: unless-stopped
+    shm_size: "2gb"
