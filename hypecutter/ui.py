@@ -19,7 +19,8 @@ import db as _db
 # Config / constants
 # ─────────────────────────────────────────────────────────────────
 
-_HC_CONFIG_FILE = Path("output/hypecutter_config.json")
+from paths import hc_config_path as _hc_config_path, hc_output_dir as _hc_output_dir, downloads_dir as _hc_downloads_dir
+_HC_CONFIG_FILE = _hc_config_path()
 
 _RANGE_PRESETS: dict[str, tuple[int, int]] = {
     "Short (Under 30s)": (5, 30),
@@ -301,8 +302,8 @@ def _hc_get_engine(
         llm_model=llm_model_.strip(),
         whisper_model=whisper_model_,
         base_url=base_url_.strip(),
-        downloads_dir="downloads",
-        output_dir="output",
+        downloads_dir=str(_hc_downloads_dir()),
+        output_dir=str(_hc_output_dir()),
     )
 
 
