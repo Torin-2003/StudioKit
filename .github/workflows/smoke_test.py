@@ -160,37 +160,51 @@ def test_app_launches() -> subprocess.Popen:
 
 
 def test_env_var(proc: subprocess.Popen, ffmpeg_dir: Path) -> None:
-    step("3. Verify STUDIOKIT_FFMPEG_DIR exported to children (macOS only)")
-    if sys.platform != "darwin":
-        passed("skipped on Windows (env inspection not available)")
-        return
-    # Check the main process AND all children (Streamlit re-exec spawns a new tree)
-    all_pids = [proc.pid] + list_child_pids_mac(proc.pid)
-    print(f"  inspecting {len(all_pids)} PID(s): {all_pids}")
-    for pid in all_pids:
-        env = get_process_env_mac(pid)
-        val = env.get("STUDIOKIT_FFMPEG_DIR", "")
-        if val:
+    step("3. Verify STUDIOKIT_FFMPEG_DIR set in app startup log")
+    # Reading another process's env vars is restricted on macOS, but we already
+    # capture run_app.py's setup_ffmpeg() debug prints to a log. If the log shows
+    # SET STUDIOKIT_FFMPEG_DIR, the env var is set for the whole Streamlit process.
+    log_path: Path = proc._smoke_log_path  # type: ignore[attr-defined]
+    if not log_path.exists():
+        fail("app startup log missing")
+    log = log_path.read_text()
+    if "SET STUDIOKIT_FFMPEG_DIR=" not in log:
+        fail(f"setup_ffmpeg did not export STUDIOKIT_FFMPEG_DIR.\nLog:\n{log[:2000]}")
+    # Extract the path from the log
+    for line in log.splitlines():
+        if line.startswith("[setup_ffmpeg] SET STUDIOKIT_FFMPEG_DIR="):
+            val = line.split("=", 1)[1]
             if not Path(val).exists():
-                fail(f"PID {pid} STUDIOKIT_FFMPEG_DIR={val} does not exist")
-            passed(f"PID {pid} STUDIOKIT_FFMPEG_DIR={val}")
+                fail(f"STUDIOKIT_FFMPEG_DIR={val} does not exist on disk")
+            passed(f"STUDIOKIT_FFMPEG_DIR set to {val}")
             return
-    fail(f"STUDIOKIT_FFMPEG_DIR not exported by any of {len(all_pids)} process(es)")
+    fail("could not parse STUDIOKIT_FFMPEG_DIR from log")
 
 
 def test_ytdlp_download(ffmpeg_dir: Path) -> Path:
-    step("4. Real yt-dlp download with bundled ffmpeg")
+    step("4. Generate a test video locally with ffmpeg (no network)")
     WORK.mkdir(exist_ok=True)
-    # Big Buck Bunny — Creative Commons, small, always available
-    url = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"
+    ext = ".exe" if sys.platform == "win32" else ""
+    ff = ffmpeg_dir / f"ffmpeg{ext}"
     out = WORK / "test.mp4"
     if out.exists():
         out.unlink()
-    # Use a direct CDN MP4 (no merge needed, no YT throttling on CI)
-    urllib.request.urlretrieve(url, out)
-    if not out.exists() or out.stat().st_size < 100_000:
-        fail(f"download failed, file size {out.stat().st_size if out.exists() else 0}")
-    passed(f"downloaded {out.name} ({out.stat().st_size // 1024} KB)")
+    # 3s color bar video + sine tone — exercises bundled ffmpeg end-to-end
+    cmd = [
+        str(ff), "-y",
+        "-f", "lavfi", "-i", "testsrc=duration=3:size=640x360:rate=30",
+        "-f", "lavfi", "-i", "sine=frequency=1000:duration=3",
+        "-c:v", "libx264", "-preset", "ultrafast",
+        "-c:a", "aac",
+        "-shortest",
+        str(out),
+    ]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    if r.returncode != 0:
+        fail(f"ffmpeg generation failed (rc={r.returncode}):\n{r.stderr[-1500:]}")
+    if not out.exists() or out.stat().st_size < 10_000:
+        fail(f"generated file too small: {out.stat().st_size if out.exists() else 0}")
+    passed(f"generated {out.name} ({out.stat().st_size // 1024} KB) via bundled ffmpeg")
     return out
 
 
