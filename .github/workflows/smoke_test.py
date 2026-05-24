@@ -81,6 +81,16 @@ def get_process_env_mac(pid: int) -> dict[str, str]:
     return env
 
 
+def list_child_pids_mac(parent_pid: int) -> list[int]:
+    """Return direct + descendant PIDs of parent_pid."""
+    out = subprocess.run(["pgrep", "-P", str(parent_pid)], capture_output=True, text=True)
+    direct = [int(p) for p in out.stdout.split() if p.strip().isdigit()]
+    all_pids = list(direct)
+    for child in direct:
+        all_pids.extend(list_child_pids_mac(child))
+    return all_pids
+
+
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
 def test_bundle_layout() -> Path:
@@ -99,7 +109,13 @@ def test_bundle_layout() -> Path:
     for binary in (ff, fp):
         r = subprocess.run([str(binary), "-version"], capture_output=True, text=True)
         if r.returncode != 0:
-            fail(f"{binary.name} -version failed: {r.stderr}")
+            print(f"  stdout: {r.stdout[:500]}")
+            print(f"  stderr: {r.stderr[:500]}")
+            print(f"  returncode: {r.returncode}")
+            # List DLLs alongside for diagnosis on Windows
+            if sys.platform == "win32":
+                print(f"  files in {d}: {sorted(p.name for p in d.iterdir())}")
+            fail(f"{binary.name} -version failed (rc={r.returncode})")
     passed(f"ffmpeg and ffprobe runnable")
     return d
 
@@ -134,17 +150,22 @@ def test_app_launches() -> subprocess.Popen:
 
 
 def test_env_var(proc: subprocess.Popen, ffmpeg_dir: Path) -> None:
-    step("3. Verify STUDIOKIT_FFMPEG_DIR exported (macOS only)")
+    step("3. Verify STUDIOKIT_FFMPEG_DIR exported to children (macOS only)")
     if sys.platform != "darwin":
         passed("skipped on Windows (env inspection not available)")
         return
-    env = get_process_env_mac(proc.pid)
-    val = env.get("STUDIOKIT_FFMPEG_DIR", "")
-    if not val:
-        fail(f"STUDIOKIT_FFMPEG_DIR not set. Env keys: {sorted(env.keys())[:20]}")
-    if not Path(val).exists():
-        fail(f"STUDIOKIT_FFMPEG_DIR={val} does not exist")
-    passed(f"STUDIOKIT_FFMPEG_DIR={val}")
+    # Check the main process AND all children (Streamlit re-exec spawns a new tree)
+    all_pids = [proc.pid] + list_child_pids_mac(proc.pid)
+    print(f"  inspecting {len(all_pids)} PID(s): {all_pids}")
+    for pid in all_pids:
+        env = get_process_env_mac(pid)
+        val = env.get("STUDIOKIT_FFMPEG_DIR", "")
+        if val:
+            if not Path(val).exists():
+                fail(f"PID {pid} STUDIOKIT_FFMPEG_DIR={val} does not exist")
+            passed(f"PID {pid} STUDIOKIT_FFMPEG_DIR={val}")
+            return
+    fail(f"STUDIOKIT_FFMPEG_DIR not exported by any of {len(all_pids)} process(es)")
 
 
 def test_ytdlp_download(ffmpeg_dir: Path) -> Path:
