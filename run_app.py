@@ -92,44 +92,79 @@ def run_self_test() -> int:
         return 1
     print(f"OK: bundled ffmpeg generated {tmp} ({tmp.stat().st_size} bytes)", flush=True)
 
-    # Now the critical test: invoke yt-dlp with ydl_opts pointing at a public MP4
-    # AND verify it can use bundled ffmpeg (-merge requires ffmpeg)
+    # Critical test: verify yt-dlp can find and USE bundled ffmpeg for merging.
+    # YouTube blocks CI datacenter IPs, so we test the merge path directly:
+    # 1. Use bundled ffmpeg to create separate video-only and audio-only files
+    # 2. Use yt-dlp's FFmpegMergerPP (the exact code path that fails when ffmpeg missing)
+    #    to merge them — this is the SAME code yt-dlp runs after downloading
     try:
         import yt_dlp
-        # Real YouTube URL — short Creative Commons video, exactly what users hit
-        # "Me at the zoo" (first YouTube video, 18 seconds)
-        url = "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+        from yt_dlp.postprocessor import FFmpegMergerPP
         out_dir = Path(tempfile.gettempdir()) / "studiokit_selftest_dl"
         out_dir.mkdir(exist_ok=True)
-        # Same options the real Downloader class uses — including the merge that
-        # triggers the "ffmpeg is not installed" error
-        opts = {
-            "format": "bestvideo[height<=480][ext=mp4]+bestaudio[ext=m4a]/best[height<=480][ext=mp4]/best",
-            "outtmpl": str(out_dir / "%(id)s.%(ext)s"),
-            "merge_output_format": "mp4",
-            "quiet": False,
-            "no_warnings": False,
+
+        # Create video-only stream (simulate bestvideo)
+        vid_only = out_dir / "video_only.mp4"
+        r = subprocess.run(
+            [str(ff), "-y",
+             "-f", "lavfi", "-i", "testsrc=duration=2:size=320x240:rate=30",
+             "-an", "-c:v", "libx264", "-preset", "ultrafast", str(vid_only)],
+            capture_output=True, text=True, timeout=60,
+        )
+        if r.returncode != 0:
+            print(f"FAIL: create video-only failed: {r.stderr[-300:]}", flush=True)
+            return 1
+
+        # Create audio-only stream (simulate bestaudio)
+        aud_only = out_dir / "audio_only.m4a"
+        r = subprocess.run(
+            [str(ff), "-y",
+             "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+             "-vn", "-c:a", "aac", str(aud_only)],
+            capture_output=True, text=True, timeout=60,
+        )
+        if r.returncode != 0:
+            print(f"FAIL: create audio-only failed: {r.stderr[-300:]}", flush=True)
+            return 1
+
+        print(f"OK: created separate video ({vid_only.stat().st_size}B) and audio ({aud_only.stat().st_size}B) streams", flush=True)
+
+        # Now invoke FFmpegMergerPP — this is EXACTLY what yt-dlp does after downloading
+        # separate streams. This fails with "ffmpeg is not installed" when ffmpeg_location wrong.
+        merged = out_dir / "merged.mp4"
+        ydl_opts = {
             "ffmpeg_location": ffmpeg_dir,
-            "nocheckcertificate": True,
+            "quiet": True,
+            "no_warnings": True,
         }
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            print(f"OK: yt-dlp downloaded YouTube video {info.get('id', '?')}", flush=True)
-            # Verify the merged mp4 actually exists and has content
-            mp4 = out_dir / f"{info.get('id', '?')}.mp4"
-            if mp4.exists() and mp4.stat().st_size > 10_000:
-                print(f"OK: merged output {mp4.name} ({mp4.stat().st_size} bytes)", flush=True)
-            else:
-                print(f"FAIL: merged mp4 missing or empty: {mp4}", flush=True)
-                return 1
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            merger = FFmpegMergerPP(ydl)
+            # FFmpegMergerPP.run() uses requested_formats + __files_to_merge
+            info = {
+                "id": "selftest",
+                "ext": "mp4",
+                "filepath": str(merged),
+                "__files_to_merge": [str(vid_only), str(aud_only)],
+                "requested_formats": [
+                    {"filepath": str(vid_only), "ext": "mp4", "vcodec": "h264", "acodec": "none", "protocol": "https"},
+                    {"filepath": str(aud_only), "ext": "m4a", "vcodec": "none", "acodec": "aac", "protocol": "https"},
+                ],
+            }
+            files, _ = merger.run(info)
+
+        if merged.exists() and merged.stat().st_size > 5_000:
+            print(f"OK: yt-dlp FFmpegMergerPP merged to {merged.name} ({merged.stat().st_size} bytes)", flush=True)
+        else:
+            print(f"FAIL: merged output missing or empty: {merged}", flush=True)
+            return 1
     except Exception as e:
-        # If yt-dlp can't find ffmpeg, this is THE bug — fail loudly
         msg = str(e).lower()
-        if "ffmpeg" in msg or "merging of multiple formats" in msg:
+        if "ffmpeg" in msg or "merging" in msg or "not installed" in msg:
             print(f"FAIL: yt-dlp can't find bundled ffmpeg: {e}", flush=True)
             return 1
-        # Other errors (geo block, age gate) — still fail since we picked a public video
-        print(f"FAIL: yt-dlp error: {type(e).__name__}: {e}", flush=True)
+        print(f"FAIL: yt-dlp merger error: {type(e).__name__}: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
         return 1
 
     print("=== self-test PASSED ===", flush=True)
