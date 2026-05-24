@@ -35,10 +35,13 @@ def _get_ffmpeg_dir() -> str | None:
         return env_dir
     # Fallback to sys.frozen detection (for one-file bundles where frozen IS True)
     if getattr(sys, "frozen", False):
+        exe_dir = Path(sys.executable).parent
         candidates = [
             Path(sys._MEIPASS) / "ffmpeg_bin",
-            Path(sys.executable).parent / "ffmpeg_bin",
-            Path(sys.executable).parent / "_internal" / "ffmpeg_bin",
+            exe_dir / "ffmpeg_bin",
+            exe_dir / "_internal" / "ffmpeg_bin",
+            exe_dir.parent / "Resources" / "ffmpeg_bin",
+            exe_dir.parent / "Frameworks" / "ffmpeg_bin",
         ]
         for ffmpeg_dir in candidates:
             if ffmpeg_dir.exists():

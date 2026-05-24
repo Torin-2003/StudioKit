@@ -11,11 +11,17 @@ def get_app_path():
 
 def setup_ffmpeg():
     if getattr(sys, "frozen", False):
-        # Try all known PyInstaller layouts: _MEIPASS (onefile), exe dir, _internal (onedir)
+        exe_dir = Path(sys.executable).parent
+        # Try all known PyInstaller layouts:
+        # - onefile: _MEIPASS/ffmpeg_bin
+        # - Windows onedir: exe/ffmpeg_bin and exe/_internal/ffmpeg_bin
+        # - macOS .app bundle: Contents/MacOS/<exe> → ../Resources/ffmpeg_bin and ../Frameworks/ffmpeg_bin
         candidates = [
             Path(sys._MEIPASS) / "ffmpeg_bin",
-            Path(sys.executable).parent / "ffmpeg_bin",
-            Path(sys.executable).parent / "_internal" / "ffmpeg_bin",
+            exe_dir / "ffmpeg_bin",
+            exe_dir / "_internal" / "ffmpeg_bin",
+            exe_dir.parent / "Resources" / "ffmpeg_bin",
+            exe_dir.parent / "Frameworks" / "ffmpeg_bin",
         ]
         for ffmpeg_dir in candidates:
             if ffmpeg_dir.exists():
