@@ -48,7 +48,7 @@ jobs:
       - name: Run smoke test (Mac)
         run: python .github/workflows/smoke_test.py
 
-      - name: In-bundle self-test (Mac) — yt-dlp merge + whisper transcription
+      - name: In-bundle self-test (Mac) — yt-dlp merge + render pipeline
         env:
           STUDIOKIT_SELFTEST: "1"
         timeout-minutes: 10
