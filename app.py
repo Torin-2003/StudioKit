@@ -105,10 +105,35 @@ if not _DEV_MODE:
                     _lc._DEFAULT_LICENSE_PATH.unlink(missing_ok=True)
                     _status = "none"
                 else:
-                    st.session_state["_license_online_verified"] = True
+                    # ── Server-time clock skew check ──────────────────────────
+                    try:
+                        from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+                        _server_ts = _hb_resp.json().get("server_time")
+                        if _server_ts:
+                            _server_now = _dt.fromisoformat(_server_ts)
+                            _local_now = _dt.now(_tz.utc)
+                            _skew = abs((_server_now - _local_now).total_seconds())
+                            if _skew > 300:  # > 5 minutes clock skew
+                                # Re-check expiry using server time instead of local time
+                                _exp = (_lic_data or {}).get("expires_at")
+                                if _exp:
+                                    try:
+                                        if _server_now > _dt.fromisoformat(_exp):
+                                            _lc._DEFAULT_LICENSE_PATH.unlink(missing_ok=True)
+                                            _status = "expired"
+                                    except Exception:
+                                        pass
+                    except Exception:
+                        pass
+                    if _status == "active":
+                        _lc.update_last_online()
+                        st.session_state["_license_online_verified"] = True
             except Exception:
-                # Network error — allow offline use, don't block startup
-                st.session_state["_license_online_verified"] = True
+                # Network error — check grace period before allowing offline use
+                if _lc.is_grace_period_expired():
+                    _status = "none"  # Grace period over, must go online to verify
+                else:
+                    st.session_state["_license_online_verified"] = True
         else:
             st.session_state["_license_online_verified"] = True
 
