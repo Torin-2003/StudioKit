@@ -144,9 +144,11 @@ st.set_page_config(
 with st.sidebar:
     st.title(f"🎬 {t('app_title', _lang)}")
     st.divider()
-    _tool = st.radio(
+    _tool_labels = [t("tool_hypecutter", _lang), t("tool_scene_manager", _lang)]
+    _tool_idx = st.radio(
         "Tool",
-        [t("tool_hypecutter", _lang), t("tool_scene_manager", _lang)],
+        range(len(_tool_labels)),
+        format_func=lambda i: _tool_labels[i],
         label_visibility="collapsed",
         key="active_tool",
     )
@@ -171,7 +173,7 @@ with st.sidebar:
             st.warning(t("no_license", _lang))
 
 # ── Render selected tool ──────────────────────────────────────────────────────
-if _tool == t("tool_hypecutter", _lang):
+if _tool_idx == 0:
     from hypecutter.ui import render as _render_hc
     _render_hc()
 else:
