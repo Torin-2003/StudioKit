@@ -5,8 +5,10 @@ Classes: Downloader, Transcriber, SilenceRemover, AIAnalyzer, VideoEditor, AutoH
 
 import json
 import logging
+import os
 import re
 import subprocess
+import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -16,6 +18,15 @@ import yt_dlp
 from faster_whisper import WhisperModel
 
 logger = logging.getLogger(__name__)
+
+
+def _get_ffmpeg_dir() -> str | None:
+    """Return ffmpeg_bin directory path when running as frozen PyInstaller bundle."""
+    if getattr(sys, "frozen", False):
+        ffmpeg_dir = Path(sys._MEIPASS) / "ffmpeg_bin"
+        if ffmpeg_dir.exists():
+            return str(ffmpeg_dir)
+    return None
 
 
 class WordToken(TypedDict):
@@ -75,6 +86,9 @@ class Downloader:
             "fragment_retries": 5,
             "nocheckcertificate": True,
         }
+        _ffmpeg_dir = _get_ffmpeg_dir()
+        if _ffmpeg_dir:
+            ydl_opts["ffmpeg_location"] = _ffmpeg_dir
         if progress_callback:
 
             def hook(d: dict) -> None:
