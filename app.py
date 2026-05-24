@@ -82,7 +82,30 @@ if not _DEV_MODE:
     import license_client as _lc
 
     _LICENSE_SERVER_URL = os.environ.get("LICENSE_SERVER_URL", "https://hype-cutter.vercel.app")
+
+    # ── Revoke signal from background heartbeat ───────────────────────────────
+    if st.session_state.pop("license_revoked", False):
+        st.rerun()
+
+    # ── Local signature verification ──────────────────────────────────────────
     _status, _payload = _lg.verify_local_license()
+
+    # ── Startup online verification (once per process, not per rerun) ─────────
+    if _status == "active" and not st.session_state.get("_license_online_verified"):
+        try:
+            _hb_resp = _requests.post(
+                f"{_LICENSE_SERVER_URL}/heartbeat",
+                json={"token": _payload["token"], "machine_id": _lc.get_machine_id()},
+                timeout=5,
+            )
+            if _hb_resp.status_code in (403, 404):
+                _lc._DEFAULT_LICENSE_PATH.unlink(missing_ok=True)
+                _status = "none"
+            else:
+                st.session_state["_license_online_verified"] = True
+        except Exception:
+            # Network error — allow offline use, don't block startup
+            st.session_state["_license_online_verified"] = True
 
     if _status != "active":
         st.set_page_config(

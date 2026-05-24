@@ -1,4 +1,8 @@
-"""Background heartbeat: pings license server every 15 minutes."""
+"""Background heartbeat: pings license server every 15 minutes.
+
+On revoke/404, deletes the local license file AND sets
+st.session_state.license_revoked = True so the UI can rerun immediately.
+"""
 import logging
 import os
 import threading
@@ -33,6 +37,12 @@ def run_heartbeat_once() -> bool:
         if resp.status_code in (403, 404):
             _DEFAULT_LICENSE_PATH.unlink(missing_ok=True)
             logger.warning("License revoked by server (status=%s)", resp.status_code)
+            # Signal the UI to rerun on next interaction
+            try:
+                import streamlit as st
+                st.session_state["license_revoked"] = True
+            except Exception:
+                pass
             return False
         logger.warning("Heartbeat rejected (status=%s)", resp.status_code)
         return False
