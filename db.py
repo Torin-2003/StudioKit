@@ -15,7 +15,9 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path("data/hypecutter.db")
+from paths import db_path as _db_path
+
+DB_PATH = _db_path()
 
 
 def _ensure_dir() -> None:
