@@ -2334,9 +2334,20 @@ class VideoEditor:
             raise RuntimeError(f"FFmpeg failed (rc={result.returncode}):\n{tail}")
 
     @staticmethod
+    def _ffprobe_exe() -> str:
+        """Return absolute path to ffprobe binary from bundled ffmpeg dir, or bare 'ffprobe'."""
+        ffmpeg_dir = _get_ffmpeg_dir()
+        if ffmpeg_dir:
+            ext = ".exe" if sys.platform == "win32" else ""
+            candidate = Path(ffmpeg_dir) / f"ffprobe{ext}"
+            if candidate.exists():
+                return str(candidate)
+        return "ffprobe"
+
+    @staticmethod
     def _probe_video(path: str) -> dict:
         cmd = [
-            "ffprobe",
+            VideoEditor._ffprobe_exe(),
             "-v",
             "quiet",
             "-print_format",
@@ -2357,7 +2368,7 @@ class VideoEditor:
     def probe_duration(path: str) -> float:
         """Return video duration in seconds via ffprobe. Falls back to 0.0 on error."""
         cmd = [
-            "ffprobe",
+            VideoEditor._ffprobe_exe(),
             "-v",
             "quiet",
             "-print_format",
