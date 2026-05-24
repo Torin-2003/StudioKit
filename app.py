@@ -2,6 +2,76 @@
 
 import os
 import streamlit as st
+from i18n import t, detect_lang
+
+# ── Language bootstrap (runs before any st.* call that renders) ───────────────
+if "lang" not in st.session_state:
+    st.session_state.lang = detect_lang()
+_lang = st.session_state.lang
+
+# ── CSS: language switcher pinned top-right + hide Streamlit chrome ───────────
+st.markdown(
+    """
+    <style>
+    #MainMenu, footer {visibility: hidden;}
+    footer {display: none;}
+
+    /* Language switcher container */
+    div[data-testid="stMainBlockContainer"] > div:first-child {
+        position: relative;
+    }
+    .sk-lang-switcher {
+        position: fixed;
+        top: 14px;
+        right: 80px;
+        z-index: 9999;
+        display: flex;
+        gap: 4px;
+        background: rgba(255,255,255,0.0);
+    }
+    .sk-lang-btn {
+        font-size: 12px;
+        padding: 2px 8px;
+        border-radius: 4px;
+        border: 1px solid #ccc;
+        background: transparent;
+        cursor: pointer;
+        color: inherit;
+        line-height: 1.6;
+    }
+    .sk-lang-btn.active {
+        background: #ff4b4b;
+        border-color: #ff4b4b;
+        color: white;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# ── Language switcher widget (query_params-based toggle) ─────────────────────
+_qp = st.query_params.get("lang", "")
+if _qp in ("en", "zh") and _qp != _lang:
+    st.session_state.lang = _qp
+    _lang = _qp
+    st.query_params.clear()
+    st.rerun()
+
+_en_active = "active" if _lang == "en" else ""
+_zh_active = "active" if _lang == "zh" else ""
+st.markdown(
+    f"""
+    <div class="sk-lang-switcher">
+        <a href="?lang=en" style="text-decoration:none;">
+            <button class="sk-lang-btn {_en_active}">EN</button>
+        </a>
+        <a href="?lang=zh" style="text-decoration:none;">
+            <button class="sk-lang-btn {_zh_active}">中文</button>
+        </a>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 # ── License gate ──────────────────────────────────────────────────────────────
 _DEV_MODE = os.environ.get("STUDIOKIT_DEV") == "1"
@@ -15,21 +85,27 @@ if not _DEV_MODE:
     _status, _payload = _lg.verify_local_license()
 
     if _status != "active":
-        st.set_page_config(page_title="StudioKit — Activate", page_icon="🔑")
-        st.title("🔑 Activate StudioKit")
-        _STATUS_MSGS = {
-            "none":     "No license found. Enter your license key to activate.",
-            "expired":  "Your license has expired. Please renew.",
-            "mismatch": "This license is bound to another machine.",
-            "tampered": "License file is corrupted. Please re-activate.",
-            "invalid":  "Invalid license. Please re-activate.",
+        st.set_page_config(
+            page_title=t("page_title_activate", _lang),
+            page_icon="🔑",
+        )
+        st.title(t("activate_title", _lang))
+        _STATUS_KEYS = {
+            "none":     "license_none",
+            "expired":  "license_expired",
+            "mismatch": "license_mismatch",
+            "tampered": "license_tampered",
+            "invalid":  "license_invalid",
         }
-        st.warning(_STATUS_MSGS.get(_status, "License required."))
-        _token_input = st.text_input("License Key", type="password",
-                                     placeholder="Paste your license key here")
-        if st.button("Activate", type="primary", use_container_width=True):
+        st.warning(t(_STATUS_KEYS.get(_status, "license_required"), _lang))
+        _token_input = st.text_input(
+            t("license_key_label", _lang),
+            type="password",
+            placeholder=t("license_key_placeholder", _lang),
+        )
+        if st.button(t("activate_btn", _lang), type="primary", use_container_width=True):
             if not _token_input.strip():
-                st.error("Please enter a license key.")
+                st.error(t("activate_empty_err", _lang))
             else:
                 try:
                     _resp = _requests.post(
@@ -45,12 +121,12 @@ if not _DEV_MODE:
                             expires_at=_pl.get("expires_at"),
                             plan=_pl.get("plan", "lifetime"),
                         )
-                        st.success("✅ Activated! Reloading…")
+                        st.success(t("activate_success", _lang))
                         st.rerun()
                     else:
-                        st.error(f"❌ {_resp.json().get('detail', 'Activation failed.')}")
+                        st.error(f"❌ {_resp.json().get('detail', t('activate_fail', _lang))}")
                 except Exception as _e:
-                    st.error(f"❌ Network error: {_e}")
+                    st.error(f"❌ {t('network_error', _lang)}: {_e}")
         st.stop()
 
     from heartbeat import start_heartbeat_scheduler as _start_hb
@@ -58,30 +134,25 @@ if not _DEV_MODE:
 # ── End license gate ──────────────────────────────────────────────────────────
 
 st.set_page_config(
-    page_title="StudioKit",
+    page_title=t("app_title", _lang),
     page_icon="🎬",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-st.markdown(
-    "<style>#MainMenu, footer {visibility: hidden;} footer {display: none;}</style>",
-    unsafe_allow_html=True,
-)
-
 # ── Sidebar: tool switcher + license status ───────────────────────────────────
 with st.sidebar:
-    st.title("🎬 StudioKit")
+    st.title(f"🎬 {t('app_title', _lang)}")
     st.divider()
     _tool = st.radio(
         "Tool",
-        ["✂️ HypeCutter", "🎬 Scene Manager"],
+        [t("tool_hypecutter", _lang), t("tool_scene_manager", _lang)],
         label_visibility="collapsed",
         key="active_tool",
     )
     st.divider()
     if _DEV_MODE:
-        st.caption("🛠️ Dev Mode — license bypass active")
+        st.caption(t("dev_mode_caption", _lang))
     else:
         import license_client as _lc2
         _lic = _lc2.load_license()
@@ -91,16 +162,16 @@ with st.sidebar:
             if _exp:
                 from datetime import datetime as _dt, timezone as _tz
                 _days = (_dt.fromisoformat(_exp) - _dt.now(_tz.utc)).days
-                _exp_label = f"· Expires in {_days}d"
+                _exp_label = t("licensed_expires", _lang, days=str(_days))
             else:
-                _exp_label = "· Lifetime"
-            st.success(f"✅ Licensed {_exp_label}")
-            st.caption(f"Plan: **{_plan}**  |  Machine bound")
+                _exp_label = t("licensed_lifetime", _lang)
+            st.success(t("licensed_ok", _lang, exp_label=_exp_label))
+            st.caption(t("plan_caption", _lang, plan=_plan))
         else:
-            st.warning("⚠️ No license")
+            st.warning(t("no_license", _lang))
 
 # ── Render selected tool ──────────────────────────────────────────────────────
-if _tool == "✂️ HypeCutter":
+if _tool == t("tool_hypecutter", _lang):
     from hypecutter.ui import render as _render_hc
     _render_hc()
 else:
