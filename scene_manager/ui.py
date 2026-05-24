@@ -28,7 +28,8 @@ from scene_manager.downloader import (
 )
 
 # ── Config ────────────────────────────────────────────────────────────────────
-CONFIG_PATH = Path("output/scene_manager_config.json")
+from paths import sm_config_path as _sm_config_path
+CONFIG_PATH = _sm_config_path()
 
 
 def _sm_load_config() -> dict:
