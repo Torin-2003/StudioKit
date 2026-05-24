@@ -92,19 +92,24 @@ if not _DEV_MODE:
 
     # ── Startup online verification (once per process, not per rerun) ─────────
     if _status == "active" and not st.session_state.get("_license_online_verified"):
-        try:
-            _hb_resp = _requests.post(
-                f"{_LICENSE_SERVER_URL}/heartbeat",
-                json={"token": _payload["token"], "machine_id": _lc.get_machine_id()},
-                timeout=5,
-            )
-            if _hb_resp.status_code in (403, 404):
-                _lc._DEFAULT_LICENSE_PATH.unlink(missing_ok=True)
-                _status = "none"
-            else:
+        _lic_data = _lc.load_license()
+        _token = _lic_data.get("token", "") if _lic_data else ""
+        if _token:
+            try:
+                _hb_resp = _requests.post(
+                    f"{_LICENSE_SERVER_URL}/heartbeat",
+                    json={"token": _token, "machine_id": _lc.get_machine_id()},
+                    timeout=5,
+                )
+                if _hb_resp.status_code in (403, 404):
+                    _lc._DEFAULT_LICENSE_PATH.unlink(missing_ok=True)
+                    _status = "none"
+                else:
+                    st.session_state["_license_online_verified"] = True
+            except Exception:
+                # Network error — allow offline use, don't block startup
                 st.session_state["_license_online_verified"] = True
-        except Exception:
-            # Network error — allow offline use, don't block startup
+        else:
             st.session_state["_license_online_verified"] = True
 
     if _status != "active":
