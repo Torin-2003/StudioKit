@@ -48,6 +48,12 @@ jobs:
       - name: Run smoke test (Mac)
         run: python .github/workflows/smoke_test.py
 
+      - name: In-bundle self-test (Mac) — real yt-dlp + bundled ffmpeg
+        env:
+          STUDIOKIT_SELFTEST: "1"
+        run: |
+          ./dist/StudioKit.app/Contents/MacOS/StudioKit
+
       - name: Zip Mac app
         run: |
           cd dist
@@ -103,6 +109,13 @@ jobs:
 
       - name: Run smoke test (Windows)
         run: python .github/workflows/smoke_test.py
+
+      - name: In-bundle self-test (Windows) — real yt-dlp + bundled ffmpeg
+        env:
+          STUDIOKIT_SELFTEST: "1"
+        shell: cmd
+        run: |
+          dist\StudioKit\StudioKit.exe
 
       - name: Zip Windows exe
         run: Compress-Archive -Path dist\StudioKit -DestinationPath dist\StudioKit-windows.zip
