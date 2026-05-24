@@ -192,8 +192,11 @@ def run_self_test() -> int:
     # The last printed line before crash = the crash location.
 
     # Step A: Generate a realistic-length audio (30s, not 3s) to stress-test transcription
-    print("DIAG: generating 30s test video with speech-like audio...", flush=True)
-    av_file = Path(tempfile.gettempdir()) / "studiokit_selftest_av.mp4"
+    # Use unique dir per run to avoid collisions when Streamlit spawns multiple workers
+    import uuid as _uuid
+    _run_id = _uuid.uuid4().hex[:8]
+    print(f"DIAG: generating 30s test video (run_id={_run_id})...", flush=True)
+    av_file = Path(tempfile.gettempdir()) / f"studiokit_selftest_{_run_id}_av.mp4"
     r = subprocess.run(
         [str(ff), "-y",
          "-f", "lavfi", "-i", "testsrc=duration=30:size=320x240:rate=30",

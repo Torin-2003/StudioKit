@@ -1748,6 +1748,21 @@ TRANSCRIPT:
 class VideoEditor:
     DEFAULT_FONT = "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc"
 
+    # Platform fallback fonts for burn-in subtitles when no font_path supplied
+    _FONT_CANDIDATES: list[str] = [
+        # Linux (Docker / CI)
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        # macOS
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/Library/Fonts/Arial Unicode.ttf",
+        # Windows
+        "C:/Windows/Fonts/arial.ttf",
+        "C:/Windows/Fonts/segoeui.ttf",
+        "C:/Windows/Fonts/calibri.ttf",
+    ]
+
     CROSSFADE_DUR: float = 0.10  # 100ms audio crossfade at segment joins
     ZOOM_FACTOR: float = 1.05  # 5% zoom on segments after the first (zoom-cut effect)
     OVERALL_FADE_DUR: float = 1.0  # full in/out fade duration for continuous clips
@@ -2103,10 +2118,15 @@ class VideoEditor:
         fontsize: int = 54,
     ) -> list[str]:
         """Build FFmpeg drawtext filter strings for burn-in subtitles."""
-        resolved_font = font_path or (
-            self.DEFAULT_FONT if Path(self.DEFAULT_FONT).exists() else None
-        )
+        if font_path and Path(font_path).exists():
+            resolved_font: str | None = font_path
+        else:
+            resolved_font = next(
+                (f for f in self._FONT_CANDIDATES if Path(f).exists()), None
+            )
         font_decl = f"fontfile='{resolved_font}':" if resolved_font else ""
+        if not resolved_font:
+            logger.warning("No font found for burn-in subtitles — text may not render on some ffmpeg builds")
 
         chunks = self._split_words_by_chars(words, fontsize=fontsize)
 
