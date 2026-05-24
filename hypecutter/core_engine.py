@@ -23,10 +23,22 @@ logger = logging.getLogger(__name__)
 def _get_ffmpeg_dir() -> str | None:
     """Return ffmpeg_bin directory path when running as frozen PyInstaller bundle."""
     if getattr(sys, "frozen", False):
-        ffmpeg_dir = Path(sys._MEIPASS) / "ffmpeg_bin"
-        if ffmpeg_dir.exists():
-            return str(ffmpeg_dir)
+        # Try _MEIPASS (one-file mode) and exe directory (one-folder mode)
+        candidates = [
+            Path(sys._MEIPASS) / "ffmpeg_bin",
+            Path(sys.executable).parent / "ffmpeg_bin",
+            Path(sys.executable).parent / "_internal" / "ffmpeg_bin",
+        ]
+        for ffmpeg_dir in candidates:
+            if ffmpeg_dir.exists():
+                # Also inject into PATH so subprocess calls work
+                os.environ["PATH"] = str(ffmpeg_dir) + os.pathsep + os.environ.get("PATH", "")
+                return str(ffmpeg_dir)
     return None
+
+
+# Run once at import time so PATH is set before any subprocess is spawned
+_get_ffmpeg_dir()
 
 
 class WordToken(TypedDict):
