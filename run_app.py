@@ -72,6 +72,25 @@ def run_self_test() -> int:
         print(f"FAIL: core_engine import: {e}", flush=True)
         return 1
 
+    # Verify faster_whisper assets are bundled (silero_vad_v6.onnx must exist)
+    try:
+        import faster_whisper
+        fw_dir = Path(faster_whisper.__file__).parent
+        onnx = fw_dir / "assets" / "silero_vad_v6.onnx"
+        if not onnx.exists():
+            # Also check sys._MEIPASS path
+            meipass = getattr(sys, "_MEIPASS", None)
+            if meipass:
+                onnx = Path(meipass) / "faster_whisper" / "assets" / "silero_vad_v6.onnx"
+        if onnx.exists():
+            print(f"OK: faster_whisper silero_vad_v6.onnx found at {onnx}", flush=True)
+        else:
+            print(f"FAIL: silero_vad_v6.onnx not found (checked {fw_dir}/assets/)", flush=True)
+            return 1
+    except Exception as e:
+        print(f"FAIL: faster_whisper assets check: {e}", flush=True)
+        return 1
+
     # Generate test video with bundled ffmpeg (proves ffmpeg works from inside bundle)
     import subprocess
     import tempfile

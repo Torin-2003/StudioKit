@@ -50,6 +50,7 @@ if os.path.exists("ffmpeg_bin"):
 datas += collect_data_files("streamlit")
 datas += collect_data_files("altair")
 datas += collect_data_files("scenedetect")
+datas += collect_data_files("faster_whisper")  # includes silero_vad_v6.onnx and other assets
 
 datas += copy_metadata("streamlit")
 datas += copy_metadata("requests")
