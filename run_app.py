@@ -16,10 +16,40 @@ def setup_ffmpeg():
             os.environ["PATH"] = str(ffmpeg_dir) + os.pathsep + os.environ.get("PATH", "")
 
 
+def _open_browser_when_ready(url: str, timeout: int = 30) -> None:
+    """Poll url until it responds (up to timeout seconds), then open browser."""
+    import time
+    import urllib.request
+
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            urllib.request.urlopen(url, timeout=2)
+            break  # server is up
+        except Exception:
+            time.sleep(0.5)
+
+    # Open browser — os.startfile is more reliable in Windows frozen bundles
+    if sys.platform == "win32":
+        os.startfile(url)  # type: ignore[attr-defined]
+    else:
+        import webbrowser
+        webbrowser.open(url)
+
+
 if __name__ == "__main__":
     setup_ffmpeg()
     if getattr(sys, "frozen", False):
         os.environ.pop("STUDIOKIT_DEV", None)
+
+    import threading
+    t = threading.Thread(
+        target=_open_browser_when_ready,
+        args=("http://localhost:8501",),
+        daemon=True,
+    )
+    t.start()
+
     from streamlit.web import cli as stcli
     sys.argv = [
         "streamlit", "run", get_app_path(),
