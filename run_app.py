@@ -282,7 +282,7 @@ def run_self_test() -> int:
         from hypecutter.core_engine import VideoEditor
         out_dir = Path(tempfile.gettempdir()) / "studiokit_selftest_render"
         out_dir.mkdir(exist_ok=True)
-        editor = VideoEditor(output_dir=str(out_dir), ffmpeg_dir=ffmpeg_dir)
+        editor = VideoEditor(output_dir=str(out_dir))
         print("DIAG: VideoEditor created OK", flush=True)
 
         # Simulate a highlight segment from AI output
