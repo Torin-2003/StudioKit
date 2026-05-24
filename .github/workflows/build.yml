@@ -45,6 +45,9 @@ jobs:
       - name: Build Mac app
         run: pyinstaller StudioKit.spec
 
+      - name: Run smoke test (Mac)
+        run: python .github/workflows/smoke_test.py
+
       - name: Zip Mac app
         run: |
           cd dist
@@ -93,6 +96,9 @@ jobs:
 
       - name: Build Windows exe
         run: pyinstaller StudioKit.spec
+
+      - name: Run smoke test (Windows)
+        run: python .github/workflows/smoke_test.py
 
       - name: Zip Windows exe
         run: Compress-Archive -Path dist\StudioKit -DestinationPath dist\StudioKit-windows.zip
