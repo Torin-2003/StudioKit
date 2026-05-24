@@ -126,21 +126,31 @@ def test_app_launches() -> subprocess.Popen:
     if not exe.exists():
         fail(f"app executable not found at {exe}")
 
+    # Tee app output to a log file so we can inspect setup_ffmpeg debug prints
+    log_path = ROOT / "app_startup.log"
+    log_file = open(log_path, "w")
     proc = subprocess.Popen(
         [str(exe)],
-        stdout=subprocess.PIPE,
+        stdout=log_file,
         stderr=subprocess.STDOUT,
         text=True,
     )
+    proc._smoke_log_path = log_path  # type: ignore[attr-defined]
     # Wait up to 60s for Streamlit to serve
     deadline = time.time() + 60
+    log_path = proc._smoke_log_path  # type: ignore[attr-defined]
     while time.time() < deadline:
         if proc.poll() is not None:
-            out = proc.stdout.read() if proc.stdout else ""
+            out = log_path.read_text() if log_path.exists() else ""
             fail(f"app exited early (rc={proc.returncode}):\n{out}")
         try:
             with urllib.request.urlopen("http://localhost:8501", timeout=2) as r:
                 if r.status < 500:
+                    # Dump app log so setup_ffmpeg debug prints are visible
+                    if log_path.exists():
+                        print("--- app startup log ---")
+                        print(log_path.read_text()[:2000])
+                        print("--- end log ---")
                     passed(f"Streamlit serving on :8501 (HTTP {r.status})")
                     return proc
         except Exception:

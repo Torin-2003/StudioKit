@@ -10,12 +10,10 @@ def get_app_path():
 
 
 def setup_ffmpeg():
-    if getattr(sys, "frozen", False):
+    frozen = getattr(sys, "frozen", False)
+    print(f"[setup_ffmpeg] frozen={frozen} executable={sys.executable}", flush=True)
+    if frozen:
         exe_dir = Path(sys.executable).parent
-        # Try all known PyInstaller layouts:
-        # - onefile: _MEIPASS/ffmpeg_bin
-        # - Windows onedir: exe/ffmpeg_bin and exe/_internal/ffmpeg_bin
-        # - macOS .app bundle: Contents/MacOS/<exe> → ../Resources/ffmpeg_bin and ../Frameworks/ffmpeg_bin
         candidates = [
             Path(sys._MEIPASS) / "ffmpeg_bin",
             exe_dir / "ffmpeg_bin",
@@ -24,11 +22,13 @@ def setup_ffmpeg():
             exe_dir.parent / "Frameworks" / "ffmpeg_bin",
         ]
         for ffmpeg_dir in candidates:
+            print(f"[setup_ffmpeg] trying {ffmpeg_dir} exists={ffmpeg_dir.exists()}", flush=True)
             if ffmpeg_dir.exists():
-                # Prepend to PATH AND export as env var so child Streamlit process inherits
                 os.environ["PATH"] = str(ffmpeg_dir) + os.pathsep + os.environ.get("PATH", "")
                 os.environ["STUDIOKIT_FFMPEG_DIR"] = str(ffmpeg_dir)
+                print(f"[setup_ffmpeg] SET STUDIOKIT_FFMPEG_DIR={ffmpeg_dir}", flush=True)
                 return
+        print("[setup_ffmpeg] NO candidate matched", flush=True)
 
 
 def _open_browser_when_ready(url: str, timeout: int = 30) -> None:

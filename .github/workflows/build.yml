@@ -69,21 +69,25 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install FFmpeg
-        run: |
-          choco install ffmpeg -y
-          echo "C:\ProgramData\chocolatey\bin" >> $env:GITHUB_PATH
-
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
           pip install pyinstaller cython setuptools
 
-      - name: Bundle FFmpeg
+      - name: Bundle FFmpeg (static build, no DLLs)
+        shell: pwsh
         run: |
-          mkdir ffmpeg_bin
-          copy "C:\ProgramData\chocolatey\bin\ffmpeg.exe" ffmpeg_bin\ffmpeg.exe
-          copy "C:\ProgramData\chocolatey\bin\ffprobe.exe" ffmpeg_bin\ffprobe.exe
+          # gyan.dev static builds: single ffmpeg.exe/ffprobe.exe with no DLL deps
+          $url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+          Invoke-WebRequest -Uri $url -OutFile ffmpeg.zip -UseBasicParsing
+          Expand-Archive -Path ffmpeg.zip -DestinationPath ffmpeg_extract
+          $ffmpegExe = Get-ChildItem -Path ffmpeg_extract -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
+          $ffprobeExe = Get-ChildItem -Path ffmpeg_extract -Recurse -Filter "ffprobe.exe" | Select-Object -First 1
+          New-Item -ItemType Directory -Force -Path ffmpeg_bin | Out-Null
+          Copy-Item $ffmpegExe.FullName ffmpeg_bin\ffmpeg.exe
+          Copy-Item $ffprobeExe.FullName ffmpeg_bin\ffprobe.exe
+          # Verify the binary runs standalone (no DLL deps)
+          .\ffmpeg_bin\ffmpeg.exe -version | Select-Object -First 1
 
       - name: Compile Cython extensions
         run: python build_cython.py build_ext --inplace
