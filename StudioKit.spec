@@ -57,12 +57,20 @@ datas += copy_metadata("packaging")
 datas += copy_metadata("scenedetect")
 datas += copy_metadata("opencv-python")
 datas += copy_metadata("Pillow")
+datas += copy_metadata("openai")
+datas += copy_metadata("anthropic")
+datas += copy_metadata("faster-whisper")
+datas += copy_metadata("yt-dlp")
 
 # ── Hidden imports ────────────────────────────────────────────────────────────
 hiddenimports = collect_submodules("streamlit")
 hiddenimports += collect_submodules("altair")
 hiddenimports += collect_submodules("scenedetect")
 hiddenimports += collect_submodules("cv2")
+hiddenimports += collect_submodules("openai")
+hiddenimports += collect_submodules("anthropic")
+hiddenimports += collect_submodules("faster_whisper")
+hiddenimports += collect_submodules("yt_dlp")
 
 # ── Compiled extensions ───────────────────────────────────────────────────────
 extra_binaries = collect_cython_extensions()
