@@ -173,8 +173,10 @@ class Transcriber:
             language=language or None,
             word_timestamps=True,
             beam_size=5,
-            vad_filter=True,
-            vad_parameters={"min_silence_duration_ms": 500},
+            # vad_filter disabled: ONNX Runtime silero VAD causes segfault on Windows
+            # frozen bundles when combined with word_timestamps=True. Transcription
+            # quality is unaffected; silence handling is done by SilenceRemover instead.
+            vad_filter=False,
         )
 
         words: list[WordToken] = []

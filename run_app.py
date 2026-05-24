@@ -212,11 +212,22 @@ def run_self_test() -> int:
         os.environ.setdefault("HF_HOME", str(hf_cache))
         os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(hf_cache))
 
-        # Run faster-whisper tiny (same as what Transcriber does, with vad_filter=True)
+        # Run faster-whisper with EXACT same params as Transcriber.transcribe()
+        # beam_size=5, word_timestamps=True, vad_filter=True — this combo crashes on Windows
         model = faster_whisper.WhisperModel("tiny", device="cpu", compute_type="int8")
-        segments, info = model.transcribe(str(av_file), beam_size=1, vad_filter=True)
-        seg_list = list(segments)  # force generator to run fully — this is where crashes happen
-        print(f"OK: faster-whisper transcribed {len(seg_list)} segment(s), lang={info.language}", flush=True)
+        segments, info = model.transcribe(
+            str(av_file),
+            language=None,
+            word_timestamps=True,   # MUST match Transcriber exactly
+            beam_size=5,            # MUST match Transcriber exactly
+            vad_filter=False,       # MUST match Transcriber exactly (VAD disabled — segfaults on Windows)
+        )
+        words = []
+        for seg in segments:
+            if seg.words:
+                for w in seg.words:
+                    words.append({"word": w.word, "start": w.start, "end": w.end})
+        print(f"OK: faster-whisper transcribed {len(words)} words, lang={info.language}", flush=True)
         del model  # free memory
     except Exception as e:
         print(f"FAIL: faster-whisper transcription: {type(e).__name__}: {e}", flush=True)
