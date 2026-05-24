@@ -26,6 +26,7 @@ from scene_manager.downloader import (
     check_ytdlp, get_video_info, download_video,
     is_valid_url, check_disk_space,
 )
+from i18n import t as _t
 
 # ── Config ────────────────────────────────────────────────────────────────────
 from paths import sm_config_path as _sm_config_path
@@ -136,6 +137,7 @@ def _sm_process_video_file(
     threshold: float, num_frames: int, granularity: str,
     model_name: str,
 ) -> dict:
+    _lang = st.session_state.get("lang", "en")
     output_dir = _sm_active_output_dir()
     topic = _sm_active_topic()
 
@@ -272,29 +274,30 @@ def _sm_process_video_file(
     status_box.empty()
 
     if results_table:
-        st.success(f"✅ {len(results_table)} clip(s) saved across {len(folders_used)} folder(s): {', '.join(sorted(folders_used))}")
+        st.success(_t("sm_clips_saved", _lang, n=str(len(results_table)), f=str(len(folders_used)), folders=', '.join(sorted(folders_used))))
         st.dataframe(results_table, use_container_width=True)
     else:
-        st.warning("No clips were successfully processed.")
+        st.warning(_t("sm_no_clips_processed", _lang))
 
     return {"clips": len(results_table), "folders": sorted(folders_used)}
 
 
 # ── Main render entry point ───────────────────────────────────────────────────
 def render():
+    _lang = st.session_state.get("lang", "en")
     _sm_init_state()
 
     # ── Sidebar ───────────────────────────────────────────────────────────────
     with st.sidebar:
 
         # ── Profile selector ─────────────────────────────────────────────────
-        st.header("📁 Library Profile")
+        st.header(_t("sm_library_profile", _lang))
 
         profiles = st.session_state.sm_profiles
         profile_names = list(profiles.keys())
 
         if not profile_names:
-            st.warning("No profiles yet. Create one below.")
+            st.warning(_t("sm_no_profiles", _lang))
             current_profile = ""
         else:
             current_idx = profile_names.index(st.session_state.sm_active_profile) if st.session_state.sm_active_profile in profile_names else 0
@@ -331,25 +334,25 @@ def render():
 
             col_save, col_del = st.columns([3, 1])
             with col_save:
-                if st.button("💾 Save Profile", use_container_width=True, key="sm_btn_save_profile"):
+                if st.button(_t("sm_save_profile", _lang), use_container_width=True, key="sm_btn_save_profile"):
                     if new_out and not Path(new_out).is_absolute():
-                        st.error("Path must start with /")
+                        st.error(_t("sm_path_must_start", _lang))
                     else:
                         profiles[current_profile]["output_dir"] = new_out
                         profiles[current_profile]["topic"] = new_topic
                         st.session_state.sm_profiles = profiles
                         st.session_state.sm_browse_dir = new_out
                         _sm_persist_config()
-                        st.success("Saved!")
+                        st.success(_t("sm_saved", _lang))
             with col_del:
                 if st.button("🗑", help=f"Delete profile '{current_profile}'", use_container_width=True, key="sm_btn_del_profile"):
                     st.session_state[f"sm_confirm_del_profile_{current_profile}"] = True
 
             if st.session_state.get(f"sm_confirm_del_profile_{current_profile}"):
-                st.warning(f"Delete **{current_profile}**? This only removes the profile, not the files on disk.")
+                st.warning(_t("sm_delete_confirm", _lang, name=current_profile))
                 c1, c2 = st.columns(2)
                 with c1:
-                    if st.button("Yes, delete", key="sm_confirm_del_yes"):
+                    if st.button(_t("sm_yes_delete", _lang), key="sm_confirm_del_yes"):
                         del profiles[current_profile]
                         st.session_state.sm_profiles = profiles
                         st.session_state.sm_active_profile = list(profiles.keys())[0] if profiles else ""
@@ -357,23 +360,23 @@ def render():
                         _sm_persist_config()
                         st.rerun()
                 with c2:
-                    if st.button("Cancel", key="sm_confirm_del_no"):
+                    if st.button(_t("sm_cancel", _lang), key="sm_confirm_del_no"):
                         st.session_state[f"sm_confirm_del_profile_{current_profile}"] = False
                         st.rerun()
 
         # New profile
         st.divider()
-        with st.expander("➕ New Profile"):
+        with st.expander(_t("sm_new_profile", _lang)):
             new_name = st.text_input("Profile name", placeholder="NFL", key="sm_new_profile_name")
             new_dir  = st.text_input("Output directory", placeholder="/Users/yourname/Videos/NFL", key="sm_new_profile_dir")
             new_top  = st.text_input("Topic hint", placeholder="NFL American Football games", key="sm_new_profile_topic")
-            if st.button("Create", key="sm_btn_create_profile"):
+            if st.button(_t("sm_create_btn", _lang), key="sm_btn_create_profile"):
                 if not new_name.strip():
-                    st.error("Name required.")
+                    st.error(_t("sm_name_required", _lang))
                 elif new_name in profiles:
                     st.error(f"'{new_name}' already exists.")
                 elif new_dir and not Path(new_dir).is_absolute():
-                    st.error("Path must start with /")
+                    st.error(_t("sm_path_must_start", _lang))
                 else:
                     profiles[new_name] = {"output_dir": new_dir, "topic": new_top}
                     st.session_state.sm_profiles = profiles
@@ -386,7 +389,7 @@ def render():
         st.divider()
 
         # ── API settings ─────────────────────────────────────────────────────
-        st.header("⚙️ API Settings")
+        st.header(_t("sm_api_settings", _lang))
 
         api_key = st.text_input(
             "API Key", type="password",
@@ -407,7 +410,7 @@ def render():
         )
 
         st.divider()
-        st.subheader("Scene Detection")
+        st.subheader(_t("sm_scene_detection", _lang))
         threshold = st.slider(
             "Sensitivity (lower = more cuts)",
             min_value=5.0, max_value=80.0,
@@ -416,9 +419,9 @@ def render():
             key="sm_threshold_slider",
         )
         if threshold < 30:
-            st.caption("⚠️ Very sensitive — may produce many small clips.")
+            st.caption(_t("sm_sensitivity_high", _lang))
         elif threshold > 55:
-            st.caption("ℹ️ Low sensitivity — only large scene changes detected.")
+            st.caption(_t("sm_sensitivity_low", _lang))
 
         min_clip_enabled = st.toggle(
             "Filter short clips",
@@ -453,7 +456,7 @@ def render():
         else:
             brightness_thr = st.session_state.sm_cfg_brightness_thr
 
-        st.subheader("GPT Analysis")
+        st.subheader(_t("sm_gpt_analysis", _lang))
         num_frames = st.slider(
             "Frames per clip sent to GPT",
             min_value=1, max_value=8,
@@ -468,7 +471,7 @@ def render():
         )
 
         st.divider()
-        if st.button("💾 Save API Settings", use_container_width=True, type="primary", key="sm_btn_save_api"):
+        if st.button(_t("sm_save_api", _lang), use_container_width=True, type="primary", key="sm_btn_save_api"):
             st.session_state.sm_cfg_api_key    = api_key
             st.session_state.sm_cfg_base_url   = base_url
             st.session_state.sm_cfg_model      = model_name
@@ -480,10 +483,10 @@ def render():
             st.session_state.sm_cfg_black_filter   = black_filter
             st.session_state.sm_cfg_brightness_thr = brightness_thr
             _sm_persist_config()
-            st.success("Saved!")
+            st.success(_t("sm_saved", _lang))
 
         st.divider()
-        st.caption("**Granularity guide**")
+        st.caption(_t("sm_granularity_guide", _lang))
         st.caption("• coarse — broad (e.g. `touchdown`)")
         st.caption("• medium — balanced (e.g. `nfl_touchdown`)")
         st.caption("• fine — specific (e.g. `nfl_qb_scramble_td`)")
@@ -494,18 +497,18 @@ def render():
         prof_info = st.session_state.sm_profiles.get(ap, {})
         col_title, col_badge = st.columns([5, 2])
         with col_title:
-            st.title("🎬 Video Scene Manager")
+            st.title(_t("sm_main_title", _lang))
         with col_badge:
             st.markdown(f"<br><span style='background:#1f77b4;color:white;padding:4px 12px;border-radius:20px;font-size:14px'>📁 {ap}</span>", unsafe_allow_html=True)
         if prof_info.get("topic"):
             st.caption(f"Topic: *{prof_info['topic']}*  ·  Output: `{prof_info.get('output_dir','—')}`")
     else:
-        st.title("🎬 Video Scene Manager")
-        st.warning("No profile selected. Create one in the sidebar to get started.")
+        st.title(_t("sm_main_title", _lang))
+        st.warning(_t("sm_no_profile_warning", _lang))
         return
 
     # ── Tabs ──────────────────────────────────────────────────────────────────
-    tab_process, tab_library = st.tabs(["Process Videos", "Browse Library"])
+    tab_process, tab_library = st.tabs([_t("sm_tab_process", _lang), _t("sm_tab_library", _lang)])
 
     # ════════════════════════════════════════════════════════════════════════
     # TAB 1 — Process Videos
@@ -525,11 +528,11 @@ def render():
             st.info(f"Pure split mode — clips saved to `{output_dir}/<video_name>_clips/`")
 
         st.divider()
-        input_upload, input_local, input_youtube = st.tabs(["📤 Upload Files", "📂 Local File Paths", "🌐 URL Download"])
+        input_upload, input_local, input_youtube = st.tabs([_t("sm_tab_upload", _lang), _t("sm_tab_local", _lang), _t("sm_tab_youtube", _lang)])
 
         # ── Upload mode ───────────────────────────────────────────────────────
         with input_upload:
-            st.caption("Suitable for files under ~200 MB. For larger files use Local File Paths.")
+            st.caption(_t("sm_upload_caption", _lang))
             uploaded_files = st.file_uploader(
                 "Select one or more videos",
                 type=["mp4", "mov", "avi", "mkv", "m4v"],
@@ -542,7 +545,7 @@ def render():
                     st.warning(err_key)
                 else:
                     st.write(f"**{len(uploaded_files)} file(s) ready.**")
-                    if st.button("🚀 Start Processing", type="primary", key="sm_btn_upload"):
+                    if st.button(_t("sm_start_processing", _lang), type="primary", key="sm_btn_upload"):
                         client = _sm_make_openai_client(api_key, base_url) if use_gpt else None
                         overall_log = []
                         for uf in uploaded_files:
@@ -556,13 +559,13 @@ def render():
                                 overall_log.append({"file": uf.name, **result})
 
                         st.divider()
-                        st.subheader("Session Summary")
+                        st.subheader(_t("sm_session_summary", _lang))
                         for item in overall_log:
                             st.write(f"• **{item['file']}** → {item['clips']} clip(s) in: {', '.join(item['folders']) or '—'}")
 
         # ── Local path mode ───────────────────────────────────────────────────
         with input_local:
-            st.caption("Enter absolute paths to video files. No size limit.")
+            st.caption(_t("sm_local_caption", _lang))
 
             if "sm_local_paths_text" not in st.session_state:
                 st.session_state.sm_local_paths_text = ""
@@ -599,7 +602,7 @@ def render():
                             if "sm_preview_data" not in st.session_state:
                                 st.session_state.sm_preview_data = {}
 
-                            if st.button("🔍 Detect Scenes (Preview)", key="sm_btn_preview"):
+                            if st.button(_t("sm_detect_scenes", _lang), key="sm_btn_preview"):
                                 st.session_state.sm_preview_data = {}
                                 for src_path in valid_paths:
                                     display_name = Path(src_path).name
@@ -645,7 +648,7 @@ def render():
                                                 if thumb and Path(thumb).exists():
                                                     st.image(thumb, use_container_width=True)
                                                 else:
-                                                    st.markdown("_(no thumbnail)_")
+                                                    st.markdown(_t("sm_no_thumbnail", _lang))
                                                 checked = st.checkbox(
                                                     f"Scene {ci+1} · {clip['duration']}",
                                                     value=pdata["selected"][ci],
@@ -655,7 +658,7 @@ def render():
                                                 if checked:
                                                     any_selected = True
 
-                                if any_selected and st.button("🚀 Process Selected Scenes", type="primary", key="sm_btn_preview_go"):
+                                if any_selected and st.button(_t("sm_process_selected", _lang), type="primary", key="sm_btn_preview_go"):
                                     client = _sm_make_openai_client(api_key, base_url)
                                     overall_log = []
                                     for src_path, pdata in st.session_state.sm_preview_data.items():
@@ -724,7 +727,7 @@ def render():
                                         )
                                         shutil.rmtree(pdata["raw_dir"], ignore_errors=True)
                                         if results_table:
-                                            st.success(f"✅ {len(results_table)} clip(s) saved.")
+                                            st.success(_t("sm_clips_saved_short", _lang, n=str(len(results_table))))
                                             st.dataframe(results_table, use_container_width=True)
                                         overall_log.append({"file": display_name, "clips": len(results_table), "folders": sorted(folders_used)})
 
@@ -733,13 +736,13 @@ def render():
                                             cleanup_frames(frames)
                                     st.session_state.sm_preview_data = {}
                                     st.divider()
-                                    st.subheader("Session Summary")
+                                    st.subheader(_t("sm_session_summary", _lang))
                                     for item in overall_log:
                                         st.write(f"• **{item['file']}** → {item['clips']} clip(s) in: {', '.join(item['folders'])}")
 
                         # ── Normal mode ───────────────────────────────────────
                         else:
-                            if st.button("🚀 Start Processing", type="primary", key="sm_btn_local"):
+                            if st.button(_t("sm_start_processing", _lang), type="primary", key="sm_btn_local"):
                                 client = _sm_make_openai_client(api_key, base_url) if use_gpt else None
                                 overall_log = []
                                 for src_path in valid_paths:
@@ -750,7 +753,7 @@ def render():
                                     overall_log.append({"file": display_name, **result})
 
                                 st.divider()
-                                st.subheader("Session Summary")
+                                st.subheader(_t("sm_session_summary", _lang))
                                 for item in overall_log:
                                     st.write(f"• **{item['file']}** → {item['clips']} clip(s) in: {', '.join(item['folders']) or '—'}")
 
@@ -762,7 +765,7 @@ def render():
                 st.code("brew install yt-dlp", language="bash")
                 return
 
-            st.caption(f"yt-dlp {ytdlp_ver} · Supports YouTube, Twitter/X, Instagram, TikTok, Bilibili, Vimeo, and 1000+ sites.")
+            st.caption(_t("sm_ytdlp_caption", _lang, ver=ytdlp_ver))
 
             yt_urls_raw = st.text_area(
                 "Video URLs (one per line)",
@@ -879,7 +882,7 @@ def render():
 
                                 st.session_state.sm_yt_infos = []
                                 st.divider()
-                                st.subheader("Session Summary")
+                                st.subheader(_t("sm_session_summary", _lang))
                                 for item in overall_log:
                                     folders_str = ", ".join(item["folders"]) if item["folders"] else "—"
                                     st.write(f"• **{item['file']}** → {item['clips']} clip(s) in: {folders_str}")
@@ -1182,7 +1185,7 @@ def render():
                         if st.session_state.get(play_key):
                             st.video(str(clip_file))
                     else:
-                        st.caption("_(file not found on disk)_")
+                        st.caption(_t("hc_file_not_found", _lang))
 
                     st.divider()
             st.divider()
