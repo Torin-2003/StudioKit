@@ -186,53 +186,93 @@ def run_self_test() -> int:
         traceback.print_exc()
         return 1
 
-    # Test Whisper transcription end-to-end (this is what crashes after transcription on Windows)
-    # Generate a video with audio, then transcribe it with faster-whisper tiny model
+    # ── DIAGNOSTIC: trace every step after transcription to find exact crash point ──
+    # User reports crash after "✅ Transcription complete: 3167 words" every time.
+    # We run each step in isolation with explicit print before AND after.
+    # The last printed line before crash = the crash location.
+
+    # Step A: Generate a realistic-length audio (30s, not 3s) to stress-test transcription
+    print("DIAG: generating 30s test video with speech-like audio...", flush=True)
+    av_file = Path(tempfile.gettempdir()) / "studiokit_selftest_av.mp4"
+    r = subprocess.run(
+        [str(ff), "-y",
+         "-f", "lavfi", "-i", "testsrc=duration=30:size=320x240:rate=30",
+         "-f", "lavfi", "-i", "sine=frequency=440:duration=30",
+         "-c:v", "libx264", "-preset", "ultrafast",
+         "-c:a", "aac", "-shortest", str(av_file)],
+        capture_output=True, text=True, timeout=120,
+    )
+    if r.returncode != 0:
+        print(f"FAIL: ffmpeg av generation: {r.stderr[-300:]}", flush=True)
+        return 1
+    print(f"DIAG: av file ready ({av_file.stat().st_size} bytes)", flush=True)
+
+    # Step B: Load Whisper model (base, same as default user setting)
+    hf_cache = Path(tempfile.gettempdir()) / "studiokit_hf_cache"
+    hf_cache.mkdir(exist_ok=True)
+    os.environ.setdefault("HF_HOME", str(hf_cache))
+    os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(hf_cache))
+
+    print("DIAG: loading faster_whisper...", flush=True)
+    import faster_whisper
+    print(f"DIAG: faster_whisper version {faster_whisper.__version__}", flush=True)
+
+    print("DIAG: creating WhisperModel(tiny)...", flush=True)
+    model = faster_whisper.WhisperModel("tiny", device="cpu", compute_type="int8")
+    print("DIAG: WhisperModel created OK", flush=True)
+
+    # Step C: transcribe — exact same params as Transcriber.transcribe()
+    print("DIAG: calling model.transcribe() with word_timestamps=True, beam_size=5, vad_filter=False...", flush=True)
     try:
-        import faster_whisper
-        print(f"OK: faster_whisper version {faster_whisper.__version__}", flush=True)
-
-        # Make a 3s video with audio (faster-whisper needs audio content)
-        av_file = Path(tempfile.gettempdir()) / "studiokit_selftest_av.mp4"
-        r = subprocess.run(
-            [str(ff), "-y",
-             "-f", "lavfi", "-i", "testsrc=duration=3:size=320x240:rate=30",
-             "-f", "lavfi", "-i", "sine=frequency=440:duration=3",
-             "-c:v", "libx264", "-preset", "ultrafast",
-             "-c:a", "aac", "-shortest", str(av_file)],
-            capture_output=True, text=True, timeout=60,
-        )
-        if r.returncode != 0:
-            print(f"FAIL: ffmpeg av generation: {r.stderr[-300:]}", flush=True)
-            return 1
-
-        # Point HF cache to temp dir so tiny model downloads work in CI
-        hf_cache = Path(tempfile.gettempdir()) / "studiokit_hf_cache"
-        hf_cache.mkdir(exist_ok=True)
-        os.environ.setdefault("HF_HOME", str(hf_cache))
-        os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(hf_cache))
-
-        # Run faster-whisper with EXACT same params as Transcriber.transcribe()
-        # beam_size=5, word_timestamps=True, vad_filter=True — this combo crashes on Windows
-        model = faster_whisper.WhisperModel("tiny", device="cpu", compute_type="int8")
-        segments, info = model.transcribe(
+        segments_gen, info = model.transcribe(
             str(av_file),
             language=None,
-            word_timestamps=True,   # MUST match Transcriber exactly
-            beam_size=5,            # MUST match Transcriber exactly
-            vad_filter=False,       # MUST match Transcriber exactly (VAD disabled — segfaults on Windows)
+            word_timestamps=True,
+            beam_size=5,
+            vad_filter=False,
         )
+        print(f"DIAG: transcribe() returned generator, iterating segments...", flush=True)
         words = []
-        for seg in segments:
+        for i, seg in enumerate(segments_gen):
             if seg.words:
                 for w in seg.words:
                     words.append({"word": w.word, "start": w.start, "end": w.end})
-        print(f"OK: faster-whisper transcribed {len(words)} words, lang={info.language}", flush=True)
-        del model  # free memory
+            if i % 5 == 0:
+                print(f"DIAG: processed {i+1} segments so far, {len(words)} words...", flush=True)
+        print(f"DIAG: transcription done: {len(words)} words, lang={info.language}", flush=True)
     except Exception as e:
-        print(f"FAIL: faster-whisper transcription: {type(e).__name__}: {e}", flush=True)
-        import traceback
-        traceback.print_exc()
+        print(f"FAIL: transcription exception: {type(e).__name__}: {e}", flush=True)
+        import traceback; traceback.print_exc()
+        return 1
+    del model
+    print("DIAG: model deleted (memory freed)", flush=True)
+
+    # Step D: probe video duration (VideoEditor.probe_duration — next step after transcription)
+    print("DIAG: testing VideoEditor.probe_duration...", flush=True)
+    try:
+        from hypecutter.core_engine import VideoEditor
+        duration = VideoEditor.probe_duration(str(av_file))
+        print(f"DIAG: probe_duration OK: {duration:.1f}s", flush=True)
+    except Exception as e:
+        print(f"FAIL: probe_duration: {type(e).__name__}: {e}", flush=True)
+        import traceback; traceback.print_exc()
+        return 1
+
+    # Step E: test openai import (AI analysis step — happens right after transcription)
+    print("DIAG: testing openai import...", flush=True)
+    try:
+        import openai
+        print(f"DIAG: openai version {openai.__version__} OK", flush=True)
+    except Exception as e:
+        print(f"FAIL: openai import: {type(e).__name__}: {e}", flush=True)
+        return 1
+
+    print("DIAG: testing anthropic import...", flush=True)
+    try:
+        import anthropic
+        print(f"DIAG: anthropic version {anthropic.__version__} OK", flush=True)
+    except Exception as e:
+        print(f"FAIL: anthropic import: {type(e).__name__}: {e}", flush=True)
         return 1
 
     print("=== self-test PASSED ===", flush=True)
