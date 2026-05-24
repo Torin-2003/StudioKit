@@ -275,6 +275,65 @@ def run_self_test() -> int:
         print(f"FAIL: anthropic import: {type(e).__name__}: {e}", flush=True)
         return 1
 
+    # Step F: Full VideoEditor render — this is the step AFTER AI analysis
+    # Test process_clip with a real clip on a real mp4 to catch rendering crashes
+    print("DIAG: testing VideoEditor full render pipeline...", flush=True)
+    try:
+        from hypecutter.core_engine import VideoEditor
+        out_dir = Path(tempfile.gettempdir()) / "studiokit_selftest_render"
+        out_dir.mkdir(exist_ok=True)
+        editor = VideoEditor(output_dir=str(out_dir), ffmpeg_dir=ffmpeg_dir)
+        print("DIAG: VideoEditor created OK", flush=True)
+
+        # Simulate a highlight segment from AI output
+        highlight = {
+            "title": "Test Clip",
+            "start": 2.0,
+            "end": 8.0,
+            "duration": 6.0,
+            "score": 8,
+            "hook_strength": 7,
+            "reason": "test",
+            "caption": "test caption",
+        }
+        fake_words = [
+            {"word": "hello", "start": 2.5, "end": 3.0},
+            {"word": "world", "start": 3.1, "end": 3.6},
+            {"word": "this", "start": 4.0, "end": 4.3},
+            {"word": "is", "start": 4.4, "end": 4.6},
+            {"word": "a", "start": 4.7, "end": 4.8},
+            {"word": "test", "start": 4.9, "end": 5.3},
+        ]
+        print("DIAG: calling process_clip (vertical=False, burn_subtitles=False)...", flush=True)
+        out_path = editor.process_clip(
+            source_path=str(av_file),
+            highlight=highlight,
+            words=fake_words,
+            clip_index=1,
+            vertical=False,
+            font_path=None,
+            burn_subtitles=False,
+        )
+        print(f"DIAG: process_clip OK: {out_path}", flush=True)
+
+        # Also test vertical crop (9:16) which uses different ffmpeg filter chain
+        print("DIAG: calling process_clip (vertical=True, burn_subtitles=True)...", flush=True)
+        out_path2 = editor.process_clip(
+            source_path=str(av_file),
+            highlight=highlight,
+            words=fake_words,
+            clip_index=2,
+            vertical=True,
+            font_path=None,
+            burn_subtitles=True,
+        )
+        print(f"DIAG: process_clip vertical+subtitles OK: {out_path2}", flush=True)
+
+    except Exception as e:
+        print(f"FAIL: VideoEditor render: {type(e).__name__}: {e}", flush=True)
+        import traceback; traceback.print_exc()
+        return 1
+
     print("=== self-test PASSED ===", flush=True)
     return 0
 
