@@ -110,6 +110,45 @@ def update_heartbeat(*, license_path: Path = _DEFAULT_LICENSE_PATH) -> None:
         license_path.write_text(json.dumps(data, indent=2))
 
 
+_GRACE_PERIOD_DAYS = 3
+
+
+def update_last_online(*, license_path: Path = _DEFAULT_LICENSE_PATH) -> None:
+    """Record current UTC time as last successful online verification."""
+    data = load_license(license_path=license_path)
+    if data is None:
+        return
+    data["last_online_verify"] = datetime.now(timezone.utc).isoformat()
+    license_path.write_text(json.dumps(data, indent=2))
+
+
+def get_last_online(*, license_path: Path = _DEFAULT_LICENSE_PATH) -> Optional[datetime]:
+    """Return last successful online verify time, or None if never verified."""
+    data = load_license(license_path=license_path)
+    if not data:
+        return None
+    ts = data.get("last_online_verify")
+    if not ts:
+        return None
+    try:
+        return datetime.fromisoformat(ts)
+    except Exception:
+        return None
+
+
+def is_grace_period_expired(*, license_path: Path = _DEFAULT_LICENSE_PATH) -> bool:
+    """Return True if last online verify is older than GRACE_PERIOD_DAYS.
+
+    Returns False (not expired) if never verified — new installs get first-run grace.
+    The startup online check will either pass (sets timestamp) or fail (blocks).
+    """
+    last = get_last_online(license_path=license_path)
+    if last is None:
+        return False  # Never verified yet — let startup online check handle it
+    delta = datetime.now(timezone.utc) - last
+    return delta.days >= _GRACE_PERIOD_DAYS
+
+
 def is_heartbeat_due(*, license_path: Path = _DEFAULT_LICENSE_PATH) -> bool:
     data = load_license(license_path=license_path)
     if not data:
