@@ -317,7 +317,8 @@ def run_self_test() -> int:
         print(f"DIAG: process_clip OK: {out_path}", flush=True)
 
         # Also test vertical crop (9:16) which uses different ffmpeg filter chain
-        print("DIAG: calling process_clip (vertical=True, burn_subtitles=True)...", flush=True)
+        # Test vertical=True without subtitles first (isolate crop vs subtitle issue)
+        print("DIAG: calling process_clip (vertical=True, burn_subtitles=False)...", flush=True)
         out_path2 = editor.process_clip(
             source_path=str(av_file),
             highlight=highlight,
@@ -325,9 +326,22 @@ def run_self_test() -> int:
             clip_index=2,
             vertical=True,
             font_path=None,
+            burn_subtitles=False,
+        )
+        print(f"DIAG: process_clip vertical=True OK: {out_path2}", flush=True)
+
+        # Then test vertical=True WITH subtitles (this is where crash happens)
+        print("DIAG: calling process_clip (vertical=True, burn_subtitles=True)...", flush=True)
+        out_path3 = editor.process_clip(
+            source_path=str(av_file),
+            highlight=highlight,
+            words=fake_words,
+            clip_index=3,
+            vertical=True,
+            font_path=None,
             burn_subtitles=True,
         )
-        print(f"DIAG: process_clip vertical+subtitles OK: {out_path2}", flush=True)
+        print(f"DIAG: process_clip vertical+subtitles OK: {out_path3}", flush=True)
 
     except Exception as e:
         print(f"FAIL: VideoEditor render: {type(e).__name__}: {e}", flush=True)

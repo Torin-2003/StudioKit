@@ -2346,8 +2346,9 @@ class VideoEditor:
 
     @staticmethod
     def _probe_video(path: str) -> dict:
+        ffprobe = VideoEditor._ffprobe_exe()
         cmd = [
-            VideoEditor._ffprobe_exe(),
+            ffprobe,
             "-v",
             "quiet",
             "-print_format",
@@ -2357,12 +2358,16 @@ class VideoEditor:
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if result.returncode != 0:
-            raise RuntimeError(f"ffprobe failed for {path}: {result.stderr.strip()}")
+            raise RuntimeError(
+                f"ffprobe failed for {path} "
+                f"(exe={ffprobe}, rc={result.returncode}): "
+                f"stdout={result.stdout[:200]!r} stderr={result.stderr[:200]!r}"
+            )
         data = json.loads(result.stdout)
         for s in data.get("streams", []):
             if s.get("codec_type") == "video":
                 return {"width": int(s["width"]), "height": int(s["height"])}
-        raise RuntimeError(f"No video stream in: {path}")
+        raise RuntimeError(f"No video stream in {path}: streams={[s.get('codec_type') for s in data.get('streams', [])]}")
 
     @staticmethod
     def probe_duration(path: str) -> float:
