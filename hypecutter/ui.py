@@ -14,6 +14,7 @@ from pathlib import Path
 import streamlit as st
 
 import db as _db
+from i18n import t as _t
 
 # ─────────────────────────────────────────────────────────────────
 # Config / constants
@@ -123,6 +124,7 @@ def _hc_status_badge(status: str) -> str:
 
 
 def _hc_render_clip_card(clip: dict, key_prefix: str) -> None:
+    _lang = st.session_state.get("lang", "en")
     score = float(clip.get("viral_score", 0))
     hook = float(clip.get("hook_score", 0))
     badge = "🟢" if score >= 8 else ("🟡" if score >= 6 else "🔴")
@@ -157,10 +159,11 @@ def _hc_render_clip_card(clip: dict, key_prefix: str) -> None:
                 key=f"{key_prefix}_dl",
             )
     else:
-        st.caption("_(file not found on disk)_")
+        st.caption(_t("hc_file_not_found", _lang))
 
 
 def _hc_render_project_history() -> None:
+    _lang = st.session_state.get("lang", "en")
     # ── Filters ──────────────────────────────────────────────────
     f_col1, f_col2 = st.columns([2, 3])
     with f_col1:
@@ -183,14 +186,14 @@ def _hc_render_project_history() -> None:
     projects = _db.list_projects(days=days_map[date_filter], search=search_q)
 
     if not projects:
-        st.info("No projects yet. Process a video to get started.")
+        st.info(_t("hc_no_projects", _lang))
         return
 
     _info_col, _folder_col = st.columns([3, 1])
     with _info_col:
-        st.caption(f"{len(projects)} project(s) found")
+        st.caption(_t("hc_projects_found", _lang, n=str(len(projects))))
     with _folder_col:
-        if st.button("📂 Output Folder", key="hc_hist_open_folder", use_container_width=True):
+        if st.button(_t("hc_output_folder", _lang), key="hc_hist_open_folder", use_container_width=True):
             _host_out2 = os.environ.get("HOST_OUTPUT_PATH", "")
             _out2_display = _host_out2 if _host_out2 else str(Path("output").resolve())
             st.info(f"📁 **Output 文件夹路径：**\n\n`{_out2_display}`\n\n→ Finder 按 **Cmd+Shift+G** 粘贴路径即可跳转")
@@ -247,7 +250,7 @@ def _hc_render_project_history() -> None:
 
             # Confirm delete
             if st.session_state.get(f"hc_confirm_del_{pid}"):
-                st.warning("Delete this project and all its clip files?")
+                st.warning(_t("hc_delete_confirm", _lang))
                 c1, c2 = st.columns(2)
                 with c1:
                     if st.button(
@@ -269,7 +272,7 @@ def _hc_render_project_history() -> None:
                         st.rerun()
                 with c2:
                     if st.button(
-                        "Cancel", key=f"hc_cancel_del_{pid}", use_container_width=True
+                        _t("hc_cancel_btn", _lang), key=f"hc_cancel_del_{pid}", use_container_width=True
                     ):
                         st.session_state.pop(f"hc_confirm_del_{pid}", None)
                         st.rerun()
@@ -277,7 +280,7 @@ def _hc_render_project_history() -> None:
             # ── Clips ────────────────────────────────────────────
             clips = _db.get_clips(pid)
             if not clips:
-                st.caption("No clips saved yet.")
+                st.caption(_t("hc_no_clips", _lang))
             else:
                 clips = sorted(clips, key=lambda c: float(c.get("viral_score", 0)), reverse=True)
                 cols_per_row = 2
@@ -312,6 +315,7 @@ def _hc_get_engine(
 # ─────────────────────────────────────────────────────────────────
 
 def render():
+    _lang = st.session_state.get("lang", "en")
     # Initialise DB once per process (no-op if tables already exist)
     _db.init_db()
 
@@ -339,10 +343,10 @@ def render():
     # ─────────────────────────────────────────────────────────────
 
     with st.sidebar:
-        st.title("⚙️ Settings")
+        st.title(_t("hc_settings_title", _lang))
 
         # ── API ──────────────────────────────────────────────────
-        st.subheader("🔑 API")
+        st.subheader(_t("hc_api_section", _lang))
 
         _PROFILE_KEYS = {
             "OpenAI":    ("hc_cfg_openai_key",    "hc_cfg_openai_base_url",    "hc_cfg_openai_model"),
@@ -415,7 +419,7 @@ def render():
             key=f"hc_sb_llm_model_{_p}",
         )
 
-        if st.button("💾 Save API Profile", key="hc_save_profile", use_container_width=True,
+        if st.button(_t("hc_save_api_profile", _lang), key="hc_save_profile", use_container_width=True,
                      help=f"Save current API Key / Base URL / Model for {provider}"):
             st.session_state[_k_key]   = api_key
             st.session_state[_k_base]  = base_url
@@ -423,12 +427,12 @@ def render():
             saved_cfg = _hc_load_config()
             saved_cfg.update({_k_key: api_key, _k_base: base_url, _k_model: llm_model})
             _hc_save_config(saved_cfg)
-            st.success(f"✅ {provider} profile saved.")
+            st.success(_t("hc_api_saved", _lang, provider=provider))
 
         st.divider()
 
         # ── Clip settings ────────────────────────────────────────
-        st.subheader("🎬 Clip Settings")
+        st.subheader(_t("hc_clip_settings", _lang))
 
         duration_mode = st.radio(
             "Duration Mode",
@@ -513,7 +517,7 @@ def render():
             )
 
         vertical = st.toggle(
-            "Vertical 9:16 output", value=st.session_state.hc_cfg_vertical, key="hc_sb_vertical"
+            _t("hc_vertical_crop", _lang), value=st.session_state.hc_cfg_vertical, key="hc_sb_vertical"
         )
         burn_subtitles = st.checkbox(
             "🔤 Burn-in Subtitles",
@@ -530,17 +534,17 @@ def render():
         st.divider()
 
         # ── Download settings ────────────────────────────────────
-        st.subheader("⬇️ Download Settings")
+        st.subheader(_t("hc_download_settings", _lang))
         resolution_options = ["1080p", "720p", "480p"]
         max_resolution = st.selectbox(
-            "Max download resolution",
+            _t("hc_max_resolution", _lang),
             resolution_options,
             index=resolution_options.index(st.session_state.hc_cfg_max_resolution),
             key="hc_sb_max_resolution",
             help="Lower = faster download, less disk usage. 720p is sufficient for 9:16 clips.",
         )
         auto_delete_source = st.checkbox(
-            "🗑️ Auto-delete source after processing",
+            _t("hc_auto_delete", _lang),
             value=st.session_state.hc_cfg_auto_delete_source,
             key="hc_sb_auto_delete_source",
             help="Delete the downloaded source video after all clips are rendered. Local uploads are never deleted.",
@@ -549,7 +553,7 @@ def render():
         st.divider()
 
         # ── Whisper ──────────────────────────────────────────────
-        st.subheader("🎙️ Whisper Model")
+        st.subheader(_t("hc_whisper_section", _lang))
         whisper_options = ["tiny", "base", "small", "medium", "large-v2", "large-v3"]
         whisper_model = st.selectbox(
             "Model size",
@@ -583,7 +587,7 @@ def render():
         st.divider()
 
         # ── Save config ──────────────────────────────────────────
-        if st.button("💾 Save Configuration", key="hc_save_configuration", use_container_width=True):
+        if st.button(_t("hc_save_configuration", _lang), key="hc_save_configuration", use_container_width=True):
             cfg = {
                 "hc_cfg_provider": provider,
                 "hc_cfg_api_key": api_key,
@@ -607,19 +611,19 @@ def render():
             for k, v in cfg.items():
                 st.session_state[k] = v
             _hc_save_config(cfg)
-            st.success("✅ Saved — settings will persist after refresh.")
+            st.success(_t("hc_config_saved", _lang))
 
     # ─────────────────────────────────────────────────────────────
     # Main area — input
     # ─────────────────────────────────────────────────────────────
 
-    st.title("✂️ AutoHighlight Pro Max")
+    st.title(_t("hc_main_title", _lang))
     st.caption(
         "Automatically extract ranked viral clips from long-form videos — powered by AI."
     )
 
     tab_url, tab_file, tab_history = st.tabs(
-        ["🔗 URL Input", "📂 Local File Upload", "📋 Project History"]
+        [_t("hc_tab_url", _lang), _t("hc_tab_file", _lang), _t("hc_tab_history", _lang)]
     )
 
     with tab_url:
@@ -666,13 +670,13 @@ def render():
     col_run, col_clear = st.columns([5, 1])
     with col_run:
         run_btn = st.button(
-            "🚀 Start Processing",
+            _t("hc_run_btn", _lang),
             type="primary",
             use_container_width=True,
             disabled=(not all_sources or st.session_state.hc_processing),
         )
     with col_clear:
-        if st.button("🗑️ Clear", key="hc_clear_btn", use_container_width=True):
+        if st.button(_t("hc_clear_btn", _lang), key="hc_clear_btn", use_container_width=True):
             st.session_state.hc_results = []
             st.session_state.hc_log_lines = []
             st.rerun()
@@ -683,7 +687,7 @@ def render():
 
     if run_btn:
         if not api_key:
-            st.error("Enter your API key in the sidebar first.")
+            st.error(_t("hc_no_api_key", _lang))
             st.stop()
 
         st.session_state.hc_processing = True
@@ -778,11 +782,11 @@ def render():
         st.divider()
         _hdr_col, _btn_col = st.columns([4, 1])
         with _hdr_col:
-            st.subheader("🏆 Generated Clips")
+            st.subheader(_t("hc_generated_clips", _lang))
         with _btn_col:
             _host_out = os.environ.get("HOST_OUTPUT_PATH", "")
             _out_display = _host_out if _host_out else str(Path("output").resolve())
-            if st.button("📂 Open Folder", key="hc_open_folder_btn", use_container_width=True):
+            if st.button(_t("hc_open_folder", _lang), key="hc_open_folder_btn", use_container_width=True):
                 st.info(f"📁 **Output 文件夹路径：**\n\n`{_out_display}`\n\n→ Finder 按 **Cmd+Shift+G** 粘贴路径即可跳转")
 
         results = st.session_state.hc_results
@@ -835,6 +839,6 @@ def render():
                     elif res.get("error"):
                         st.error(f"Render failed: {res['error']}")
                     else:
-                        st.warning("Output file not found.")
+                        st.warning(_t("hc_output_file_not_found", _lang))
 
                     st.divider()
