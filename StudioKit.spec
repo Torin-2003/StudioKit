@@ -25,6 +25,7 @@ def collect_cython_extensions():
 datas = [
     ("app.py", "."),
     ("run_app.py", "."),
+    ("i18n.py", "."),
     # UI files (not compiled — Streamlit UI can't be Cython compiled)
     ("hypecutter/ui.py", "hypecutter/"),
     ("hypecutter/__init__.py", "hypecutter/"),
