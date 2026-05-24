@@ -48,9 +48,10 @@ jobs:
       - name: Run smoke test (Mac)
         run: python .github/workflows/smoke_test.py
 
-      - name: In-bundle self-test (Mac) — real yt-dlp + bundled ffmpeg
+      - name: In-bundle self-test (Mac) — yt-dlp merge + whisper transcription
         env:
           STUDIOKIT_SELFTEST: "1"
+        timeout-minutes: 10
         run: |
           ./dist/StudioKit.app/Contents/MacOS/StudioKit
 
@@ -110,9 +111,10 @@ jobs:
       - name: Run smoke test (Windows)
         run: python .github/workflows/smoke_test.py
 
-      - name: In-bundle self-test (Windows) — real yt-dlp + bundled ffmpeg
+      - name: In-bundle self-test (Windows) — yt-dlp merge + whisper transcription
         env:
           STUDIOKIT_SELFTEST: "1"
+        timeout-minutes: 10
         shell: cmd
         run: |
           dist\StudioKit\StudioKit.exe

@@ -186,6 +186,44 @@ def run_self_test() -> int:
         traceback.print_exc()
         return 1
 
+    # Test Whisper transcription end-to-end (this is what crashes after transcription on Windows)
+    # Generate a video with audio, then transcribe it with faster-whisper tiny model
+    try:
+        import faster_whisper
+        print(f"OK: faster_whisper version {faster_whisper.__version__}", flush=True)
+
+        # Make a 3s video with audio (faster-whisper needs audio content)
+        av_file = Path(tempfile.gettempdir()) / "studiokit_selftest_av.mp4"
+        r = subprocess.run(
+            [str(ff), "-y",
+             "-f", "lavfi", "-i", "testsrc=duration=3:size=320x240:rate=30",
+             "-f", "lavfi", "-i", "sine=frequency=440:duration=3",
+             "-c:v", "libx264", "-preset", "ultrafast",
+             "-c:a", "aac", "-shortest", str(av_file)],
+            capture_output=True, text=True, timeout=60,
+        )
+        if r.returncode != 0:
+            print(f"FAIL: ffmpeg av generation: {r.stderr[-300:]}", flush=True)
+            return 1
+
+        # Point HF cache to temp dir so tiny model downloads work in CI
+        hf_cache = Path(tempfile.gettempdir()) / "studiokit_hf_cache"
+        hf_cache.mkdir(exist_ok=True)
+        os.environ.setdefault("HF_HOME", str(hf_cache))
+        os.environ.setdefault("HUGGINGFACE_HUB_CACHE", str(hf_cache))
+
+        # Run faster-whisper tiny (same as what Transcriber does, with vad_filter=True)
+        model = faster_whisper.WhisperModel("tiny", device="cpu", compute_type="int8")
+        segments, info = model.transcribe(str(av_file), beam_size=1, vad_filter=True)
+        seg_list = list(segments)  # force generator to run fully — this is where crashes happen
+        print(f"OK: faster-whisper transcribed {len(seg_list)} segment(s), lang={info.language}", flush=True)
+        del model  # free memory
+    except Exception as e:
+        print(f"FAIL: faster-whisper transcription: {type(e).__name__}: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
+        return 1
+
     print("=== self-test PASSED ===", flush=True)
     return 0
 
@@ -199,19 +237,45 @@ if __name__ == "__main__":
     if os.environ.get("STUDIOKIT_SELFTEST") == "1":
         sys.exit(run_self_test())
 
-    import threading
-    t = threading.Thread(
-        target=_open_browser_when_ready,
-        args=("http://localhost:8501",),
-        daemon=True,
+    # Set up crash log so errors aren't lost when the console window closes
+    import logging
+    import traceback as _tb
+    _log_dir = Path.home() / "StudioKit_logs"
+    _log_dir.mkdir(exist_ok=True)
+    _log_file = _log_dir / "studiokit.log"
+    logging.basicConfig(
+        level=logging.WARNING,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        handlers=[
+            logging.FileHandler(_log_file, encoding="utf-8"),
+            logging.StreamHandler(sys.stdout),
+        ],
     )
-    t.start()
+    print(f"[StudioKit] Log file: {_log_file}", flush=True)
 
-    from streamlit.web import cli as stcli
-    sys.argv = [
-        "streamlit", "run", get_app_path(),
-        "--server.headless=true",
-        "--browser.gatherUsageStats=false",
-        "--global.developmentMode=false",
-    ]
-    sys.exit(stcli.main())
+    try:
+        import threading
+        t = threading.Thread(
+            target=_open_browser_when_ready,
+            args=("http://localhost:8501",),
+            daemon=True,
+        )
+        t.start()
+
+        from streamlit.web import cli as stcli
+        sys.argv = [
+            "streamlit", "run", get_app_path(),
+            "--server.headless=true",
+            "--browser.gatherUsageStats=false",
+            "--global.developmentMode=false",
+        ]
+        sys.exit(stcli.main())
+    except Exception as _e:
+        _tb.print_exc()
+        with open(_log_file, "a", encoding="utf-8") as _f:
+            _f.write("\n=== CRASH ===\n")
+            _tb.print_exc(file=_f)
+        print(f"\n[StudioKit] CRASHED — see log: {_log_file}", flush=True)
+        if sys.platform == "win32":
+            input("Press Enter to close...")
+        sys.exit(1)
