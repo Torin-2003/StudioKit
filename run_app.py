@@ -58,6 +58,22 @@ def run_self_test() -> int:
     Triggered by STUDIOKIT_SELFTEST=1 env var. Runs INSIDE the frozen bundle so
     we test the real yt-dlp + bundled ffmpeg integration that the user hits.
     """
+    # On macOS, PyInstaller .app bundles re-exec themselves as a child process.
+    # Use a lock file so only the FIRST instance runs the full test; subsequent
+    # child processes exit immediately to avoid OOM from concurrent Whisper loads.
+    import tempfile
+    _lock = Path(tempfile.gettempdir()) / "studiokit_selftest.lock"
+    if _lock.exists():
+        print(f"[self-test] child process detected (lock exists) — exiting", flush=True)
+        return 0
+    _lock.touch()
+    try:
+        return _run_self_test_inner()
+    finally:
+        _lock.unlink(missing_ok=True)
+
+
+def _run_self_test_inner() -> int:
     print("=== StudioKit self-test ===", flush=True)
     print(f"frozen={getattr(sys, 'frozen', False)}", flush=True)
     print(f"executable={sys.executable}", flush=True)
