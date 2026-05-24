@@ -1774,6 +1774,21 @@ class VideoEditor:
 
     # ── public API ───────────────────────────────────────────────────
 
+    @staticmethod
+    def _drawtext_supported() -> bool:
+        """Return False on Windows frozen bundles where drawtext causes ACCESS VIOLATION.
+
+        gyan.dev static ffmpeg builds crash (exit code 0xC0000005) when drawtext
+        is used in a PyInstaller-frozen process on Windows. Disable burn-in subtitles
+        in that environment to prevent the crash.
+        """
+        if sys.platform == "win32" and getattr(sys, "frozen", False):
+            return False
+        # Also check STUDIOKIT_FFMPEG_DIR — set only in frozen bundle child processes
+        if sys.platform == "win32" and os.environ.get("STUDIOKIT_FFMPEG_DIR"):
+            return False
+        return True
+
     def process_clip(
         self,
         source_path: str,
@@ -1786,6 +1801,11 @@ class VideoEditor:
         progress_callback: Callable[[str], None] | None = None,
     ) -> str:
         """Route to condensed or continuous clip renderer based on highlight structure."""
+        # drawtext crashes gyan.dev static ffmpeg on Windows frozen bundle — disable safely
+        if burn_subtitles and not self._drawtext_supported():
+            logger.warning("Burn-in subtitles disabled on Windows bundle (drawtext segfault workaround)")
+            burn_subtitles = False
+
         title = highlight.get("title", f"clip_{clip_index}")
         if progress_callback:
             progress_callback(f"🎬 Rendering clip {clip_index}: {title[:45]}…")
