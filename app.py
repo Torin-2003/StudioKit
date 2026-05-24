@@ -1,6 +1,12 @@
 """StudioKit — unified entry point."""
 
 import os
+
+# ── Bundled FFmpeg PATH injection (must run before any subprocess call) ───────
+_ffmpeg_dir = os.environ.get("STUDIOKIT_FFMPEG_DIR")
+if _ffmpeg_dir and _ffmpeg_dir not in os.environ.get("PATH", ""):
+    os.environ["PATH"] = _ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
+
 import streamlit as st
 from i18n import t, detect_lang
 

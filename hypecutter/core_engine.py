@@ -21,9 +21,20 @@ logger = logging.getLogger(__name__)
 
 
 def _get_ffmpeg_dir() -> str | None:
-    """Return ffmpeg_bin directory path when running as frozen PyInstaller bundle."""
+    """Return bundled ffmpeg_bin path.
+
+    Streamlit re-launches itself as an unfrozen child process, so we can't rely on
+    sys.frozen here. Instead, run_app.py exports STUDIOKIT_FFMPEG_DIR before launching
+    Streamlit, and we read that env var.
+    """
+    env_dir = os.environ.get("STUDIOKIT_FFMPEG_DIR")
+    if env_dir and Path(env_dir).exists():
+        # Ensure subprocess calls (ffmpeg, ffprobe by bare name) also find it
+        if env_dir not in os.environ.get("PATH", ""):
+            os.environ["PATH"] = env_dir + os.pathsep + os.environ.get("PATH", "")
+        return env_dir
+    # Fallback to sys.frozen detection (for one-file bundles where frozen IS True)
     if getattr(sys, "frozen", False):
-        # Try _MEIPASS (one-file mode) and exe directory (one-folder mode)
         candidates = [
             Path(sys._MEIPASS) / "ffmpeg_bin",
             Path(sys.executable).parent / "ffmpeg_bin",
@@ -31,7 +42,6 @@ def _get_ffmpeg_dir() -> str | None:
         ]
         for ffmpeg_dir in candidates:
             if ffmpeg_dir.exists():
-                # Also inject into PATH so subprocess calls work
                 os.environ["PATH"] = str(ffmpeg_dir) + os.pathsep + os.environ.get("PATH", "")
                 return str(ffmpeg_dir)
     return None
