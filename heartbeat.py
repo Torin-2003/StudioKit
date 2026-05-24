@@ -10,7 +10,7 @@ import time
 
 import requests
 
-from license_client import get_machine_id, load_license, update_heartbeat, _DEFAULT_LICENSE_PATH
+from license_client import get_machine_id, load_license, update_heartbeat, update_last_online, _DEFAULT_LICENSE_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +32,7 @@ def run_heartbeat_once() -> bool:
         )
         if resp.ok and resp.json().get("valid"):
             update_heartbeat()
+            update_last_online()
             logger.info("Heartbeat OK")
             return True
         if resp.status_code in (403, 404):
