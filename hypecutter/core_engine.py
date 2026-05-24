@@ -1776,16 +1776,18 @@ class VideoEditor:
 
     @staticmethod
     def _drawtext_supported() -> bool:
-        """Return False on Windows frozen bundles where drawtext causes ACCESS VIOLATION.
+        """Return False in PyInstaller frozen bundles where drawtext causes crashes.
 
-        gyan.dev static ffmpeg builds crash (exit code 0xC0000005) when drawtext
-        is used in a PyInstaller-frozen process on Windows. Disable burn-in subtitles
-        in that environment to prevent the crash.
+        Bundled ffmpeg builds crash when drawtext filter is used inside a
+        PyInstaller-frozen process on both Windows (ACCESS VIOLATION 0xC0000005)
+        and macOS (SIGSEGV 11). Disable burn-in subtitles in any frozen bundle
+        to prevent the crash.
         """
-        if sys.platform == "win32" and getattr(sys, "frozen", False):
+        if getattr(sys, "frozen", False):
             return False
-        # Also check STUDIOKIT_FFMPEG_DIR — set only in frozen bundle child processes
-        if sys.platform == "win32" and os.environ.get("STUDIOKIT_FFMPEG_DIR"):
+        # Also check STUDIOKIT_FFMPEG_DIR — set in frozen bundle child processes
+        # where sys.frozen may be False (Streamlit re-execs as unfrozen child)
+        if os.environ.get("STUDIOKIT_FFMPEG_DIR"):
             return False
         return True
 
