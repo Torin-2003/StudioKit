@@ -874,7 +874,9 @@ TRANSCRIPT:
         range_lo: int = 30,
         range_hi: int = 60,
     ) -> list[dict]:
+        print(f"[DIAG-AIA] analyze_highlights entered, words={len(words)}", flush=True)
         transcript = self._words_to_timed_transcript(words)
+        print(f"[DIAG-AIA] transcript built, len={len(transcript)}", flush=True)
         if not transcript.strip():
             raise ValueError("Transcript is empty — nothing to analyze.")
 
@@ -903,10 +905,14 @@ TRANSCRIPT:
             range_hi=range_hi,
         )
 
+        print(f"[DIAG-AIA] prompts built: sys_len={len(system)}, user_len={len(user)}", flush=True)
+
         last_err: Exception | None = None
         for attempt in range(3):
             try:
+                print(f"[DIAG-AIA] attempt {attempt+1}: calling _call_llm provider={self.provider}", flush=True)
                 raw = self._call_llm(system, user)
+                print(f"[DIAG-AIA] attempt {attempt+1}: _call_llm returned len={len(raw)}", flush=True)
                 logger.info(f"[LLM raw response attempt {attempt+1}]:\n{raw[:1000]}")
                 highlights = self._parse_json(raw)
 
