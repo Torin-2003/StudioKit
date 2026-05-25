@@ -398,6 +398,13 @@ if __name__ == "__main__":
 
     try:
         import threading
+
+        app_path = get_app_path()
+        print(f"[StudioKit] app_path={app_path}", flush=True)
+        print(f"[StudioKit] sys.executable={sys.executable}", flush=True)
+        print(f"[StudioKit] frozen={getattr(sys, 'frozen', False)}", flush=True)
+
+        # Open browser once server is ready (daemon thread)
         t = threading.Thread(
             target=_open_browser_when_ready,
             args=("http://localhost:8501",),
@@ -405,14 +412,27 @@ if __name__ == "__main__":
         )
         t.start()
 
-        from streamlit.web import cli as stcli
-        sys.argv = [
-            "streamlit", "run", get_app_path(),
-            "--server.headless=true",
-            "--browser.gatherUsageStats=false",
-            "--global.developmentMode=false",
-        ]
-        sys.exit(stcli.main())
+        # Call Streamlit bootstrap directly (blocking asyncio event loop).
+        # This is what stcli.main() eventually calls — but we call it directly
+        # to avoid Click's arg parsing swallowing errors in frozen bundles.
+        from streamlit.web import bootstrap
+        bootstrap.load_config_options(flag_options={
+            "server.headless": True,
+            "browser.gatherUsageStats": False,
+            "global.developmentMode": False,
+        })
+        bootstrap.run(
+            main_script_path=app_path,
+            is_hello=False,
+            args=[],
+            flag_options={
+                "server.headless": True,
+                "browser.gatherUsageStats": False,
+                "global.developmentMode": False,
+            },
+        )
+        sys.exit(0)
+
     except Exception as _e:
         _tb.print_exc()
         with open(_log_file, "a", encoding="utf-8") as _f:
