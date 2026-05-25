@@ -875,6 +875,8 @@ TRANSCRIPT:
         range_hi: int = 60,
     ) -> list[dict]:
         print(f"[DIAG-AIA] analyze_highlights entered, words={len(words)}", flush=True)
+        print(f"[DIAG-AIA] words[0]={words[0] if words else None}", flush=True)
+        print(f"[DIAG-AIA] calling _words_to_timed_transcript...", flush=True)
         transcript = self._words_to_timed_transcript(words)
         print(f"[DIAG-AIA] transcript built, len={len(transcript)}", flush=True)
         if not transcript.strip():

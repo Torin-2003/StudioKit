@@ -457,6 +457,18 @@ def _run_self_test_inner() -> int:
         )
         print(f"[DIAG] STEP G: AIAnalyzer built, provider={analyzer.provider}", flush=True)
 
+        print(f"[DIAG] STEP G: fake_words[0]={fake_words[0]}", flush=True)
+        print(f"[DIAG] STEP G: fake_words type: {type(fake_words).__name__}, item type: {type(fake_words[0]).__name__}", flush=True)
+        # Test calling _words_to_timed_transcript DIRECTLY (it's a staticmethod)
+        print("[DIAG] STEP G: calling _words_to_timed_transcript directly...", flush=True)
+        try:
+            from hypecutter.core_engine import AIAnalyzer as _AIA
+            test_transcript = _AIA._words_to_timed_transcript(fake_words[:10])
+            print(f"[DIAG] STEP G: direct call OK, transcript[:200]={test_transcript[:200]!r}", flush=True)
+        except Exception as e:
+            print(f"[DIAG] STEP G: direct call FAILED: {type(e).__name__}: {e}", flush=True)
+            import traceback; traceback.print_exc()
+
         print("[DIAG] STEP G: calling analyzer.analyze_highlights() — this is where user crashes", flush=True)
         highlights = analyzer.analyze_highlights(
             fake_words,
