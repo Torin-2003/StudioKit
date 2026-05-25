@@ -2,6 +2,22 @@ import sys
 import os
 from pathlib import Path
 
+# CRITICAL: force UTF-8 on stdout/stderr BEFORE anything else prints.
+# On Windows, the default cp1252 codec raises UnicodeEncodeError when emoji
+# (e.g. ✅) are printed. In a frozen bundle, an unhandled UnicodeEncodeError
+# inside Streamlit's status callback can propagate up and kill the process
+# with an ACCESS VIOLATION (0xC0000005) when it bubbles through C extensions.
+# This must run before ANY print(), and before Streamlit imports.
+if sys.platform == "win32":
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    os.environ.setdefault("PYTHONUTF8", "1")
+    try:
+        # Python 3.7+: reconfigure existing streams
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+    except Exception:
+        pass
+
 
 def get_app_path():
     if getattr(sys, "frozen", False):
@@ -399,44 +415,82 @@ def _run_self_test_inner() -> int:
         return 1
     print(f"[DIAG] STEP G: long video ready ({long_av.stat().st_size} bytes)", flush=True)
 
+    # We can't easily reproduce real Whisper output with synthetic audio (returns 0 words).
+    # So we test the POST-transcription path directly: fake the words list and call the
+    # rest of engine.process()'s logic manually (analyze + render). This is exactly the
+    # code path that crashes for the user, after "Transcription complete".
     try:
-        from hypecutter.core_engine import AutoHighlightEngine
+        from hypecutter.core_engine import AutoHighlightEngine, AIAnalyzer, VideoEditor
+        from config_client import fetch_config
         test_base = os.environ.get("STUDIOKIT_TEST_OPENAI_BASE", "")
         test_model = os.environ.get("STUDIOKIT_TEST_OPENAI_MODEL", "gpt-4o-mini")
-        downloads_dir = Path(tempfile.gettempdir()) / f"studiokit_full_dl_{_run_id}"
-        output_dir = Path(tempfile.gettempdir()) / f"studiokit_full_out_{_run_id}"
-        downloads_dir.mkdir(exist_ok=True)
-        output_dir.mkdir(exist_ok=True)
 
-        print(f"[DIAG] STEP G: building engine (whisper=base, provider=openai, model={test_model})", flush=True)
-        engine = AutoHighlightEngine(
+        # Fake a realistic words list (5min of "speech" at ~3 words/sec = 900 words)
+        # Matches user's "3161 words" workload pattern.
+        import random
+        random.seed(42)
+        vocab = ["hello", "world", "this", "is", "a", "test", "video", "with", "many",
+                 "words", "to", "simulate", "real", "transcription", "output", "from",
+                 "whisper", "model", "running", "in", "frozen", "bundle"]
+        fake_words = []
+        t = 0.0
+        for i in range(900):
+            word = random.choice(vocab)
+            duration = random.uniform(0.2, 0.5)
+            fake_words.append({"word": word, "start": round(t, 3), "end": round(t + duration, 3)})
+            t += duration + random.uniform(0.0, 0.2)
+        print(f"[DIAG] STEP G: built {len(fake_words)} fake words, last_end={fake_words[-1]['end']}", flush=True)
+
+        # Force unicode print BEFORE creating engine to surface any encoding crash
+        print("[DIAG] STEP G: testing emoji print: ✅ 🎙️ 🧠 🎬", flush=True)
+        print("[DIAG] STEP G: emoji print survived", flush=True)
+
+        # Build AIAnalyzer directly (skip Whisper instantiation since we have fake words)
+        wf = fetch_config()
+        print(f"[DIAG] STEP G: workflow_config keys: {list(wf.keys())}", flush=True)
+        analyzer = AIAnalyzer(
             provider="openai",
             api_key=test_key,
-            llm_model=test_model,
-            whisper_model="base",  # SAME as user's default
-            downloads_dir=str(downloads_dir),
-            output_dir=str(output_dir),
+            model=test_model,
             base_url=test_base,
+            workflow_config=wf,
         )
-        print("[DIAG] STEP G: engine built, calling engine.process()...", flush=True)
+        print(f"[DIAG] STEP G: AIAnalyzer built, provider={analyzer.provider}", flush=True)
 
-        def _progress(msg: str) -> None:
-            print(f"[engine.process] {msg}", flush=True)
-
-        results = engine.process(
-            source=str(long_av),
+        print("[DIAG] STEP G: calling analyzer.analyze_highlights() — this is where user crashes", flush=True)
+        highlights = analyzer.analyze_highlights(
+            fake_words,
             target_duration=30,
             n_clips=2,
-            vertical=True,
-            language=None,
-            font_path=None,
-            burn_subtitles=False,  # already known to crash; tested separately
-            auto_delete_source=False,
-            status_callback=_progress,
+            smart_mode=False,
+            condense_mode=False,
+            range_mode=False,
+            range_label="",
+            range_lo=30,
+            range_hi=60,
         )
-        print(f"[DIAG] STEP G: engine.process() returned {len(results)} clips", flush=True)
+        print(f"[DIAG] STEP G: analyze_highlights OK: {len(highlights)} highlights", flush=True)
+
+        # Now render the clips like engine.process() would
+        out_dir = Path(tempfile.gettempdir()) / f"studiokit_full_out_{_run_id}"
+        out_dir.mkdir(exist_ok=True)
+        renderer = VideoEditor(output_dir=str(out_dir))
+
+        for i, hl in enumerate(highlights, 1):
+            print(f"[DIAG] STEP G: rendering clip {i}/{len(highlights)}: {hl.get('title', '?')[:30]}", flush=True)
+            out_path = renderer.process_clip(
+                source_path=str(long_av),
+                highlight=hl,
+                words=fake_words,
+                clip_index=i,
+                vertical=True,
+                font_path=None,
+                burn_subtitles=False,
+            )
+            print(f"[DIAG] STEP G: clip {i} rendered: {out_path}", flush=True)
+
     except Exception as e:
-        print(f"FAIL: engine.process(): {type(e).__name__}: {e}", flush=True)
+        print(f"FAIL: STEP G: {type(e).__name__}: {e}", flush=True)
         import traceback; traceback.print_exc()
         return 1
 
