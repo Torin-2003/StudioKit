@@ -33,8 +33,13 @@ setup(
         extensions,
         compiler_directives={
             "language_level": "3",
-            "boundscheck": False,
-            "wraparound": False,
+            # boundscheck/wraparound MUST stay True (default).
+            # Disabling them causes ACCESS VIOLATION (0xC0000005) / SIGSEGV in
+            # frozen bundles because we operate on regular Python lists/dicts,
+            # not Cython-typed memoryviews. Without bounds checks, out-of-range
+            # accesses corrupt memory instead of raising IndexError.
+            "boundscheck": True,
+            "wraparound": True,
         },
         quiet=True,
     ),
