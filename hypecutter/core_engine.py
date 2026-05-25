@@ -874,11 +874,7 @@ TRANSCRIPT:
         range_lo: int = 30,
         range_hi: int = 60,
     ) -> list[dict]:
-        print(f"[DIAG-AIA] analyze_highlights entered, words={len(words)}", flush=True)
-        print(f"[DIAG-AIA] words[0]={words[0] if words else None}", flush=True)
-        print(f"[DIAG-AIA] calling _words_to_timed_transcript...", flush=True)
         transcript = self._words_to_timed_transcript(words)
-        print(f"[DIAG-AIA] transcript built, len={len(transcript)}", flush=True)
         if not transcript.strip():
             raise ValueError("Transcript is empty — nothing to analyze.")
 
@@ -907,14 +903,10 @@ TRANSCRIPT:
             range_hi=range_hi,
         )
 
-        print(f"[DIAG-AIA] prompts built: sys_len={len(system)}, user_len={len(user)}", flush=True)
-
         last_err: Exception | None = None
         for attempt in range(3):
             try:
-                print(f"[DIAG-AIA] attempt {attempt+1}: calling _call_llm provider={self.provider}", flush=True)
                 raw = self._call_llm(system, user)
-                print(f"[DIAG-AIA] attempt {attempt+1}: _call_llm returned len={len(raw)}", flush=True)
                 logger.info(f"[LLM raw response attempt {attempt+1}]:\n{raw[:1000]}")
                 highlights = self._parse_json(raw)
 
@@ -2527,15 +2519,9 @@ class AutoHighlightEngine:
             raise ValueError("Transcription returned no words. Check audio track.")
         update(f"✅ Transcription complete: {len(words)} words")
 
-        # DIAG markers — these prints survive a crash because we flush.
-        # If user sees "STEP A" but not "STEP B", we know where it crashed.
-        print(f"[DIAG] STEP A: post-transcribe, words={len(words)}, smart_mode={smart_mode}", flush=True)
-
         effective_n_clips = n_clips
         if smart_mode:
-            print(f"[DIAG] STEP B: calling probe_duration on {video_path}", flush=True)
             probed = VideoEditor.probe_duration(video_path)
-            print(f"[DIAG] STEP B done: probed={probed}", flush=True)
             video_duration = probed if probed > 0 else words[-1]["end"]
             ref_duration = (range_lo + range_hi) // 2 if range_mode else target_duration
             auto_count = max(1, int(video_duration // ref_duration))
@@ -2555,7 +2541,6 @@ class AutoHighlightEngine:
         if not modes:
             modes.append("Hook-First")
         update(f"🧠 AI analyzing highlights ({' + '.join(modes)} mode)…")
-        print(f"[DIAG] STEP C: calling analyze_highlights, provider={getattr(self.analyzer, 'provider', '?')}", flush=True)
 
         highlights = self.analyzer.analyze_highlights(
             words,
