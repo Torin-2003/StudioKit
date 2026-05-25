@@ -2519,18 +2519,15 @@ class AutoHighlightEngine:
             raise ValueError("Transcription returned no words. Check audio track.")
         update(f"✅ Transcription complete: {len(words)} words")
 
-        # Explicitly release Whisper model after transcription.
-        # On Windows frozen bundles, ONNX Runtime retains GPU/CPU handles that
-        # cause ACCESS VIOLATION (0xC0000005) when subsequent subprocess calls
-        # (ffprobe, ffmpeg) are made. Deleting the model + running gc frees them.
-        import gc
-        del self.transcriber
-        self.transcriber = None  # type: ignore[assignment]
-        gc.collect()
+        # DIAG markers — these prints survive a crash because we flush.
+        # If user sees "STEP A" but not "STEP B", we know where it crashed.
+        print(f"[DIAG] STEP A: post-transcribe, words={len(words)}, smart_mode={smart_mode}", flush=True)
 
         effective_n_clips = n_clips
         if smart_mode:
+            print(f"[DIAG] STEP B: calling probe_duration on {video_path}", flush=True)
             probed = VideoEditor.probe_duration(video_path)
+            print(f"[DIAG] STEP B done: probed={probed}", flush=True)
             video_duration = probed if probed > 0 else words[-1]["end"]
             ref_duration = (range_lo + range_hi) // 2 if range_mode else target_duration
             auto_count = max(1, int(video_duration // ref_duration))
@@ -2550,6 +2547,7 @@ class AutoHighlightEngine:
         if not modes:
             modes.append("Hook-First")
         update(f"🧠 AI analyzing highlights ({' + '.join(modes)} mode)…")
+        print(f"[DIAG] STEP C: calling analyze_highlights, provider={getattr(self.analyzer, 'provider', '?')}", flush=True)
 
         highlights = self.analyzer.analyze_highlights(
             words,

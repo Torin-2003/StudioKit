@@ -207,19 +207,21 @@ def _run_self_test_inner() -> int:
     # We run each step in isolation with explicit print before AND after.
     # The last printed line before crash = the crash location.
 
-    # Step A: Generate a realistic-length audio (30s, not 3s) to stress-test transcription
-    # Use unique dir per run to avoid collisions when Streamlit spawns multiple workers
+    # Step A: Generate a REALISTIC video (10 min, matches user's actual workload)
+    # User reports crash after transcribing 3161 words = ~15min real speech.
+    # We use 600s test signal to reproduce the same Whisper memory pressure.
     import uuid as _uuid
     _run_id = _uuid.uuid4().hex[:8]
-    print(f"DIAG: generating 30s test video (run_id={_run_id})...", flush=True)
+    DURATION_S = 600  # 10 minutes — matches user's real video length
+    print(f"DIAG: generating {DURATION_S}s test video (run_id={_run_id})...", flush=True)
     av_file = Path(tempfile.gettempdir()) / f"studiokit_selftest_{_run_id}_av.mp4"
     r = subprocess.run(
         [str(ff), "-y",
-         "-f", "lavfi", "-i", "testsrc=duration=30:size=320x240:rate=30",
-         "-f", "lavfi", "-i", "sine=frequency=440:duration=30",
+         "-f", "lavfi", "-i", f"testsrc=duration={DURATION_S}:size=320x240:rate=15",
+         "-f", "lavfi", "-i", f"sine=frequency=440:duration={DURATION_S}",
          "-c:v", "libx264", "-preset", "ultrafast",
          "-c:a", "aac", "-shortest", str(av_file)],
-        capture_output=True, text=True, timeout=120,
+        capture_output=True, text=True, timeout=300,
     )
     if r.returncode != 0:
         print(f"FAIL: ffmpeg av generation: {r.stderr[-300:]}", flush=True)
@@ -367,7 +369,78 @@ def _run_self_test_inner() -> int:
         import traceback; traceback.print_exc()
         return 1
 
-    print("=== self-test PASSED ===", flush=True)
+    # ── Step G: FULL end-to-end engine.process() — reproduces user crash ──
+    # User reports crash after "✅ Transcription complete: 3161 words".
+    # Only AutoHighlightEngine.process() exercises the full code path the user hits:
+    # download → transcribe → probe → AI analyze → render. We run it here with the
+    # real OpenAI API (via STUDIOKIT_TEST_OPENAI_KEY secret) on a 5-min video.
+    test_key = os.environ.get("STUDIOKIT_TEST_OPENAI_KEY")
+    if not test_key:
+        print("DIAG: STUDIOKIT_TEST_OPENAI_KEY not set — skipping full engine.process() test", flush=True)
+        print("=== self-test PASSED (skipped full process) ===", flush=True)
+        return 0
+
+    print("[DIAG] STEP G: starting FULL engine.process() reproduction", flush=True)
+    print(f"[DIAG] STEP G: generating 5min talking-like video (run_id={_run_id})...", flush=True)
+
+    # 5min video with varied audio so Whisper produces real word output
+    long_av = Path(tempfile.gettempdir()) / f"studiokit_full_{_run_id}.mp4"
+    r = subprocess.run(
+        [str(ff), "-y",
+         "-f", "lavfi", "-i", "testsrc=duration=300:size=320x240:rate=15",
+         # Modulated sine — Whisper hallucinates real words on noise-like signals
+         "-f", "lavfi", "-i", "aevalsrc=0.5*sin(440*2*PI*t)+0.3*sin(880*2*PI*t)*sin(2*PI*t/3):duration=300",
+         "-c:v", "libx264", "-preset", "ultrafast",
+         "-c:a", "aac", "-shortest", str(long_av)],
+        capture_output=True, text=True, timeout=300,
+    )
+    if r.returncode != 0:
+        print(f"FAIL: long video generation: {r.stderr[-300:]}", flush=True)
+        return 1
+    print(f"[DIAG] STEP G: long video ready ({long_av.stat().st_size} bytes)", flush=True)
+
+    try:
+        from hypecutter.core_engine import AutoHighlightEngine
+        test_base = os.environ.get("STUDIOKIT_TEST_OPENAI_BASE", "")
+        test_model = os.environ.get("STUDIOKIT_TEST_OPENAI_MODEL", "gpt-4o-mini")
+        downloads_dir = Path(tempfile.gettempdir()) / f"studiokit_full_dl_{_run_id}"
+        output_dir = Path(tempfile.gettempdir()) / f"studiokit_full_out_{_run_id}"
+        downloads_dir.mkdir(exist_ok=True)
+        output_dir.mkdir(exist_ok=True)
+
+        print(f"[DIAG] STEP G: building engine (whisper=base, provider=openai, model={test_model})", flush=True)
+        engine = AutoHighlightEngine(
+            provider="openai",
+            api_key=test_key,
+            llm_model=test_model,
+            whisper_model="base",  # SAME as user's default
+            downloads_dir=str(downloads_dir),
+            output_dir=str(output_dir),
+            base_url=test_base,
+        )
+        print("[DIAG] STEP G: engine built, calling engine.process()...", flush=True)
+
+        def _progress(msg: str) -> None:
+            print(f"[engine.process] {msg}", flush=True)
+
+        results = engine.process(
+            source=str(long_av),
+            target_duration=30,
+            n_clips=2,
+            vertical=True,
+            language=None,
+            font_path=None,
+            burn_subtitles=False,  # already known to crash; tested separately
+            auto_delete_source=False,
+            status_callback=_progress,
+        )
+        print(f"[DIAG] STEP G: engine.process() returned {len(results)} clips", flush=True)
+    except Exception as e:
+        print(f"FAIL: engine.process(): {type(e).__name__}: {e}", flush=True)
+        import traceback; traceback.print_exc()
+        return 1
+
+    print("=== self-test PASSED (incl. full engine.process) ===", flush=True)
     return 0
 
 

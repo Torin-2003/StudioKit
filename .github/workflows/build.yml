@@ -48,10 +48,14 @@ jobs:
       - name: Run smoke test (Mac)
         run: python .github/workflows/smoke_test.py
 
-      - name: In-bundle self-test (Mac) — yt-dlp merge + render pipeline
+      - name: In-bundle self-test (Mac) — yt-dlp merge + render pipeline + full engine.process
         env:
           STUDIOKIT_SELFTEST: "1"
-        timeout-minutes: 10
+          STUDIOKIT_TEST_OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }}
+          STUDIOKIT_TEST_OPENAI_BASE: ${{ secrets.OPENAI_BASE_URL }}
+          STUDIOKIT_TEST_OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+          HYPECUTTER_DEV: "1"
+        timeout-minutes: 15
         run: |
           ./dist/StudioKit.app/Contents/MacOS/StudioKit
 
@@ -111,10 +115,14 @@ jobs:
       - name: Run smoke test (Windows)
         run: python .github/workflows/smoke_test.py
 
-      - name: In-bundle self-test (Windows) — yt-dlp merge + whisper transcription
+      - name: In-bundle self-test (Windows) — yt-dlp merge + whisper + full engine.process
         env:
           STUDIOKIT_SELFTEST: "1"
-        timeout-minutes: 10
+          STUDIOKIT_TEST_OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }}
+          STUDIOKIT_TEST_OPENAI_BASE: ${{ secrets.OPENAI_BASE_URL }}
+          STUDIOKIT_TEST_OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
+          HYPECUTTER_DEV: "1"
+        timeout-minutes: 15
         shell: cmd
         run: |
           dist\StudioKit\StudioKit.exe
