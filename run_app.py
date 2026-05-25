@@ -405,18 +405,13 @@ if __name__ == "__main__":
         print(f"[StudioKit] frozen={getattr(sys, 'frozen', False)}", flush=True)
 
         # Open browser once server is ready (daemon thread)
-        t = threading.Thread(
+        browser_t = threading.Thread(
             target=_open_browser_when_ready,
             args=("http://localhost:8501",),
             daemon=True,
         )
-        t.start()
+        browser_t.start()
 
-        # In a PyInstaller frozen bundle an asyncio event loop is already running
-        # (PyInstaller's bootloader sets one up), so bootstrap.run() takes the
-        # asyncio.create_task() path and returns immediately instead of blocking.
-        # Fix: explicitly run our own event loop with asyncio.run() so we block
-        # until Streamlit's server stops.
         import asyncio
         from streamlit.web import bootstrap
         from streamlit.web.server import Server
@@ -428,18 +423,44 @@ if __name__ == "__main__":
         }
         bootstrap.load_config_options(flag_options=flag_options)
 
-        async def _run_streamlit():
-            server = Server(app_path, is_hello=False)
-            await server.start()
-            # Signal server start (prints the URLs)
-            bootstrap._on_server_start(server)
-            # Wait until server is stopped (blocks here until user quits)
-            await server.stopped
+        # Problem: in a PyInstaller frozen bundle, asyncio.run() and bootstrap.run()
+        # both return immediately because the bootloader has already set up an event
+        # loop context. The main thread exits, killing the console window.
+        #
+        # Fix: run Streamlit's async server in a non-daemon thread with its own
+        # fresh event loop. Then block the main thread with _done.wait() — this
+        # keeps the process alive regardless of asyncio loop state.
+        _done = threading.Event()
+        _exit_code = [0]
 
-        # asyncio.run() always creates a NEW event loop, so it blocks correctly
-        # even inside a frozen bundle.
-        asyncio.run(_run_streamlit())
-        sys.exit(0)
+        async def _run_server():
+            try:
+                server = Server(app_path, is_hello=False)
+                await server.start()
+                bootstrap._on_server_start(server)
+                await server.stopped
+            except Exception as exc:
+                print(f"[StudioKit] Server error: {exc}", flush=True)
+                _tb.print_exc()
+                _exit_code[0] = 1
+            finally:
+                _done.set()
+
+        def _thread_main():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(_run_server())
+            finally:
+                loop.close()
+
+        # non-daemon so process stays alive even if main thread returns
+        server_thread = threading.Thread(target=_thread_main, daemon=False, name="streamlit-server")
+        server_thread.start()
+
+        # Block main thread — keeps console window open until server stops
+        _done.wait()
+        sys.exit(_exit_code[0])
 
     except Exception as _e:
         _tb.print_exc()
