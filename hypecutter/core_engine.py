@@ -2519,6 +2519,15 @@ class AutoHighlightEngine:
             raise ValueError("Transcription returned no words. Check audio track.")
         update(f"✅ Transcription complete: {len(words)} words")
 
+        # Explicitly release Whisper model after transcription.
+        # On Windows frozen bundles, ONNX Runtime retains GPU/CPU handles that
+        # cause ACCESS VIOLATION (0xC0000005) when subsequent subprocess calls
+        # (ffprobe, ffmpeg) are made. Deleting the model + running gc frees them.
+        import gc
+        del self.transcriber
+        self.transcriber = None  # type: ignore[assignment]
+        gc.collect()
+
         effective_n_clips = n_clips
         if smart_mode:
             probed = VideoEditor.probe_duration(video_path)
