@@ -412,25 +412,33 @@ if __name__ == "__main__":
         )
         t.start()
 
-        # Call Streamlit bootstrap directly (blocking asyncio event loop).
-        # This is what stcli.main() eventually calls — but we call it directly
-        # to avoid Click's arg parsing swallowing errors in frozen bundles.
+        # In a PyInstaller frozen bundle an asyncio event loop is already running
+        # (PyInstaller's bootloader sets one up), so bootstrap.run() takes the
+        # asyncio.create_task() path and returns immediately instead of blocking.
+        # Fix: explicitly run our own event loop with asyncio.run() so we block
+        # until Streamlit's server stops.
+        import asyncio
         from streamlit.web import bootstrap
-        bootstrap.load_config_options(flag_options={
+        from streamlit.web.server import Server
+
+        flag_options = {
             "server.headless": True,
             "browser.gatherUsageStats": False,
             "global.developmentMode": False,
-        })
-        bootstrap.run(
-            main_script_path=app_path,
-            is_hello=False,
-            args=[],
-            flag_options={
-                "server.headless": True,
-                "browser.gatherUsageStats": False,
-                "global.developmentMode": False,
-            },
-        )
+        }
+        bootstrap.load_config_options(flag_options=flag_options)
+
+        async def _run_streamlit():
+            server = Server(app_path, is_hello=False)
+            await server.start()
+            # Signal server start (prints the URLs)
+            bootstrap._on_server_start(server)
+            # Wait until server is stopped (blocks here until user quits)
+            await server.stopped
+
+        # asyncio.run() always creates a NEW event loop, so it blocks correctly
+        # even inside a frozen bundle.
+        asyncio.run(_run_streamlit())
         sys.exit(0)
 
     except Exception as _e:
