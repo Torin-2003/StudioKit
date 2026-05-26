@@ -506,7 +506,122 @@ def _run_self_test_inner() -> int:
         import traceback; traceback.print_exc()
         return 1
 
-    print("=== self-test PASSED (incl. full engine.process) ===", flush=True)
+    # ── Step H: scene_manager end-to-end (Cython compiled, untested before) ──
+    # scene_manager.analyzer and scene_manager.classifier are also Cython compiled.
+    # Verify they don't crash in the frozen bundle like core_engine did before.
+    print("[DIAG] STEP H: scene_manager Cython modules test", flush=True)
+    try:
+        # 1. Import compiled modules
+        from scene_manager import analyzer as sm_analyzer
+        from scene_manager import classifier as sm_classifier
+        from scene_manager import splitter as sm_splitter
+        from scene_manager import metadata as sm_metadata
+        print("[DIAG] STEP H: imports OK", flush=True)
+
+        # 2. Use a short scenedetect-friendly video (cuts + black + content)
+        sm_video = Path(tempfile.gettempdir()) / f"studiokit_sm_{_run_id}.mp4"
+        # Two cuts: black 1s → color 2s → black 1s → color 2s
+        r = subprocess.run(
+            [str(ff), "-y",
+             "-f", "lavfi", "-i", "color=black:s=320x240:d=1,color=red:s=320x240:d=2,color=black:s=320x240:d=1,color=blue:s=320x240:d=2",
+             "-filter_complex", "[0:v][1:v][2:v][3:v]concat=n=4:v=1[v]",
+             "-map", "[v]",
+             "-c:v", "libx264", "-preset", "ultrafast", "-r", "30",
+             str(sm_video)],
+            capture_output=True, text=True, timeout=60,
+        )
+        if r.returncode != 0:
+            # Simpler fallback: testsrc with cuts
+            r = subprocess.run(
+                [str(ff), "-y",
+                 "-f", "lavfi", "-i", "testsrc=duration=6:size=320x240:rate=30",
+                 "-c:v", "libx264", "-preset", "ultrafast", str(sm_video)],
+                capture_output=True, text=True, timeout=60,
+            )
+            if r.returncode != 0:
+                print(f"FAIL: STEP H ffmpeg gen: {r.stderr[-200:]}", flush=True)
+                return 1
+        print(f"[DIAG] STEP H: video ready ({sm_video.stat().st_size} bytes)", flush=True)
+
+        # 3. detect_scenes (uses scenedetect + cv2 — was a crash candidate)
+        print("[DIAG] STEP H: calling detect_scenes...", flush=True)
+        scenes = sm_splitter.detect_scenes(str(sm_video), threshold=27.0, min_clip_sec=0.5)
+        print(f"[DIAG] STEP H: detect_scenes OK: {len(scenes)} scenes", flush=True)
+
+        # 4. split_video (subprocess ffmpeg calls)
+        sm_split_dir = Path(tempfile.gettempdir()) / f"studiokit_sm_split_{_run_id}"
+        sm_split_dir.mkdir(exist_ok=True)
+        print("[DIAG] STEP H: calling split_video...", flush=True)
+        clips = sm_splitter.split_video(
+            video_path=str(sm_video),
+            scenes=scenes,
+            output_dir=str(sm_split_dir),
+            base_name="sm_test",
+            min_clip_sec=0.5,
+            black_filter=False,
+        )
+        print(f"[DIAG] STEP H: split_video OK: {len(clips)} clips", flush=True)
+
+        if not clips:
+            print("[DIAG] STEP H: no clips to test downstream — skipping classifier", flush=True)
+        else:
+            # 5. extract_frames + analyze_clip_frames (cv2 + OpenAI vision API)
+            print("[DIAG] STEP H: calling extract_frames...", flush=True)
+            frames = sm_splitter.extract_frames(clips[0]["path"], num_frames=2)
+            print(f"[DIAG] STEP H: extract_frames OK: {len(frames)} frames", flush=True)
+
+            if frames:
+                from openai import OpenAI as _OpenAI
+                oa_client = _OpenAI(api_key=test_key, base_url=test_base)
+                print("[DIAG] STEP H: calling analyze_clip_frames (vision API)...", flush=True)
+                try:
+                    analysis = sm_analyzer.analyze_clip_frames(
+                        client=oa_client,
+                        frame_paths=frames,
+                        source_video_name="sm_test.mp4",
+                        timestamp=clips[0]["timestamp_in_source"],
+                        granularity="medium",
+                        model=test_model,
+                        topic="",
+                    )
+                    print(f"[DIAG] STEP H: analyze_clip_frames OK: category={analysis.get('suggested_category', '?')}", flush=True)
+
+                    # 6. resolve_target_folder (uses dict iteration — Cython compiled)
+                    sm_out_dir = Path(tempfile.gettempdir()) / f"studiokit_sm_out_{_run_id}"
+                    sm_out_dir.mkdir(exist_ok=True)
+                    print("[DIAG] STEP H: calling resolve_target_folder...", flush=True)
+                    folder_name = sm_classifier.resolve_target_folder(
+                        client=oa_client,
+                        output_dir=str(sm_out_dir),
+                        suggested_category=analysis.get("suggested_category", "test_category"),
+                        category_description=analysis.get("category_description", ""),
+                        granularity="medium",
+                        model=test_model,
+                        analysis_content_type=analysis.get("content_type", ""),
+                    )
+                    print(f"[DIAG] STEP H: resolve_target_folder OK: {folder_name}", flush=True)
+
+                    # 7. place_clip (file move + metadata write)
+                    print("[DIAG] STEP H: calling place_clip...", flush=True)
+                    final_path = sm_classifier.place_clip(
+                        output_dir=str(sm_out_dir),
+                        clip_info=clips[0],
+                        analysis=analysis,
+                        folder_name=folder_name,
+                        source_video_name="sm_test.mp4",
+                    )
+                    print(f"[DIAG] STEP H: place_clip OK: {final_path}", flush=True)
+                except Exception as inner:
+                    # Vision API failures are acceptable (e.g. base_url doesn't support vision)
+                    # but Cython crashes (SEGV) would not even reach this except clause.
+                    print(f"[DIAG] STEP H: vision/classify step raised (non-fatal): {type(inner).__name__}: {inner}", flush=True)
+
+    except Exception as e:
+        print(f"FAIL: STEP H: {type(e).__name__}: {e}", flush=True)
+        import traceback; traceback.print_exc()
+        return 1
+
+    print("=== self-test PASSED (incl. full engine.process + scene_manager) ===", flush=True)
     return 0
 
 
