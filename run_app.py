@@ -621,7 +621,99 @@ def _run_self_test_inner() -> int:
         import traceback; traceback.print_exc()
         return 1
 
-    print("=== self-test PASSED (incl. full engine.process + scene_manager) ===", flush=True)
+    # ── Step I: scene_manager.downloader (yt-dlp via Python module) ──
+    # User reported: "yt-dlp not available: yt-dlp not found. Install with: brew install yt-dlp"
+    # Root cause: original scene_manager/downloader.py used shutil.which("yt-dlp") to find
+    # the CLI binary — but our bundle ships the Python yt_dlp package, not a CLI binary.
+    # New downloader prefers the Python module. Verify here.
+    print("[DIAG] STEP I: scene_manager.downloader test", flush=True)
+    try:
+        from scene_manager import downloader as sm_dl
+        # 1. check_ytdlp must report available WITHOUT relying on system binary
+        avail, ver = sm_dl.check_ytdlp()
+        if not avail:
+            print(f"FAIL: STEP I: check_ytdlp says unavailable: {ver}", flush=True)
+            return 1
+        print(f"[DIAG] STEP I: check_ytdlp OK: version={ver}", flush=True)
+
+        # 2. Real download via a local HTTP server serving a real mp4 file.
+        # yt-dlp's generic extractor handles direct URLs without needing YouTube.
+        # This avoids CI IP blocking while exercising the same code path that
+        # users hit when downloading from any URL.
+        import http.server
+        import socketserver
+        import threading as _thr
+
+        sm_dl_dir = Path(tempfile.gettempdir()) / f"studiokit_sm_dl_{_run_id}"
+        sm_dl_dir.mkdir(exist_ok=True)
+        sm_serve_dir = Path(tempfile.gettempdir()) / f"studiokit_sm_serve_{_run_id}"
+        sm_serve_dir.mkdir(exist_ok=True)
+
+        # Generate a test mp4 in the served directory
+        served_mp4 = sm_serve_dir / "test_video.mp4"
+        r = subprocess.run(
+            [str(ff), "-y",
+             "-f", "lavfi", "-i", "testsrc=duration=5:size=320x240:rate=15",
+             "-f", "lavfi", "-i", "sine=frequency=440:duration=5",
+             "-c:v", "libx264", "-preset", "ultrafast",
+             "-c:a", "aac", "-shortest", str(served_mp4)],
+            capture_output=True, text=True, timeout=60,
+        )
+        if r.returncode != 0:
+            print(f"FAIL: STEP I served mp4 gen: {r.stderr[-200:]}", flush=True)
+            return 1
+        print(f"[DIAG] STEP I: served mp4 ready ({served_mp4.stat().st_size} bytes)", flush=True)
+
+        # Start a local HTTP server in the serving dir
+        os.chdir(str(sm_serve_dir))
+
+        class _QuietHandler(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, *args, **kwargs):
+                pass
+
+        httpd = socketserver.TCPServer(("127.0.0.1", 0), _QuietHandler)
+        port = httpd.server_address[1]
+        server_thread = _thr.Thread(target=httpd.serve_forever, daemon=True)
+        server_thread.start()
+        test_url = f"http://127.0.0.1:{port}/test_video.mp4"
+        print(f"[DIAG] STEP I: local http server on port {port}, url={test_url}", flush=True)
+
+        try:
+            # 3. get_video_info — uses yt_dlp.YoutubeDL.extract_info(download=False)
+            print("[DIAG] STEP I: calling get_video_info...", flush=True)
+            try:
+                info = sm_dl.get_video_info(test_url)
+                print(f"[DIAG] STEP I: get_video_info OK: title={info.get('title', '?')[:40]}", flush=True)
+            except Exception as e:
+                # Generic extractor may not return full metadata for a direct mp4 — that's OK
+                print(f"[DIAG] STEP I: get_video_info raised (non-fatal for direct mp4): {e}", flush=True)
+
+            # 4. download_video — the actual user-facing call
+            print("[DIAG] STEP I: calling download_video...", flush=True)
+            progress_calls = [0]
+            def _prog(pct, speed, eta):
+                progress_calls[0] += 1
+
+            out_file = sm_dl.download_video(
+                url=test_url,
+                output_dir=str(sm_dl_dir),
+                quality="best",
+                progress_callback=_prog,
+            )
+            if not Path(out_file).exists():
+                print(f"FAIL: STEP I: download_video returned non-existent path: {out_file}", flush=True)
+                return 1
+            print(f"[DIAG] STEP I: download_video OK: {out_file} ({Path(out_file).stat().st_size} bytes)", flush=True)
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+
+    except Exception as e:
+        print(f"FAIL: STEP I: {type(e).__name__}: {e}", flush=True)
+        import traceback; traceback.print_exc()
+        return 1
+
+    print("=== self-test PASSED (incl. full engine.process + scene_manager + downloader) ===", flush=True)
     return 0
 
 
