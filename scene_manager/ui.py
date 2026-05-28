@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import sys
 import json
 import base64
 import tempfile
@@ -112,7 +113,8 @@ def _sm_validate_output_dir(path: str) -> tuple[bool, str]:
     if not path:
         return False, "No output directory set for this profile. Edit the profile in the sidebar."
     if not Path(path).is_absolute():
-        return False, f"Output directory must start with `/`. Got: `{path}`"
+        _example = "C:\\Users\\you\\Videos" if sys.platform == "win32" else "/Users/you/Videos"
+        return False, f"Output directory must be an absolute path (e.g. `{_example}`). Got: `{path}`"
     if not Path(path).exists():
         try:
             Path(path).mkdir(parents=True)

@@ -713,7 +713,38 @@ def _run_self_test_inner() -> int:
         import traceback; traceback.print_exc()
         return 1
 
-    print("=== self-test PASSED (incl. full engine.process + scene_manager + downloader) ===", flush=True)
+    # ── Step J: UI helpers (output folder resolution, open-in-explorer) ──
+    # User reported: clicked "Output 文件夹路径" but path shown was relative,
+    # didn't auto-open, and instructions mentioned macOS (Cmd+Shift+G) only.
+    # Verify the resolved output dir is absolute + the open-in-file-manager
+    # helper imports cleanly in the frozen bundle.
+    print("[DIAG] STEP J: UI helpers test", flush=True)
+    try:
+        from paths import hc_output_dir as _hc_out, app_data_dir as _app_dir
+        out_dir = _hc_out()
+        if not out_dir.is_absolute():
+            print(f"FAIL: STEP J: hc_output_dir is not absolute: {out_dir}", flush=True)
+            return 1
+        if not out_dir.exists():
+            print(f"FAIL: STEP J: hc_output_dir does not exist: {out_dir}", flush=True)
+            return 1
+        print(f"[DIAG] STEP J: hc_output_dir OK and absolute: {out_dir}", flush=True)
+        print(f"[DIAG] STEP J: app_data_dir: {_app_dir()}", flush=True)
+
+        # Import the UI helper (does NOT actually open a folder — just verifies it loads)
+        from hypecutter.ui import _open_in_file_manager
+        # Sanity check: calling with non-existent path must return False, not crash.
+        result_nonexistent = _open_in_file_manager("/this/path/does/not/exist/xyzzy")
+        if result_nonexistent is not False:
+            print(f"FAIL: STEP J: _open_in_file_manager should return False for missing path, got {result_nonexistent}", flush=True)
+            return 1
+        print(f"[DIAG] STEP J: _open_in_file_manager handles missing paths correctly", flush=True)
+    except Exception as e:
+        print(f"FAIL: STEP J: {type(e).__name__}: {e}", flush=True)
+        import traceback; traceback.print_exc()
+        return 1
+
+    print("=== self-test PASSED (incl. full engine.process + scene_manager + downloader + ui helpers) ===", flush=True)
     return 0
 
 

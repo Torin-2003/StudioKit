@@ -9,12 +9,31 @@ import logging
 import os
 import re
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 import streamlit as st
 
 import db as _db
 from i18n import t as _t
+
+
+def _open_in_file_manager(path: str) -> bool:
+    """Open a folder in the OS file manager. Returns True on success."""
+    p = Path(path)
+    if not p.exists():
+        return False
+    try:
+        if sys.platform == "win32":
+            os.startfile(str(p))  # type: ignore[attr-defined]
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(p)])
+        else:
+            subprocess.Popen(["xdg-open", str(p)])
+        return True
+    except Exception:
+        return False
 
 # ─────────────────────────────────────────────────────────────────
 # Config / constants
@@ -195,8 +214,12 @@ def _hc_render_project_history() -> None:
     with _folder_col:
         if st.button(_t("hc_output_folder", _lang), key="hc_hist_open_folder", use_container_width=True):
             _host_out2 = os.environ.get("HOST_OUTPUT_PATH", "")
-            _out2_display = _host_out2 if _host_out2 else str(Path("output").resolve())
-            st.info(f"📁 **Output 文件夹路径：**\n\n`{_out2_display}`\n\n→ Finder 按 **Cmd+Shift+G** 粘贴路径即可跳转")
+            _out2_display = _host_out2 if _host_out2 else str(_hc_output_dir())
+            opened = _open_in_file_manager(_out2_display)
+            if opened:
+                st.success(f"📁 已打开：`{_out2_display}`")
+            else:
+                st.info(f"📁 **Output 文件夹路径：**\n\n`{_out2_display}`")
 
     for proj in projects:
         pid = proj["id"]
@@ -785,9 +808,13 @@ def render():
             st.subheader(_t("hc_generated_clips", _lang))
         with _btn_col:
             _host_out = os.environ.get("HOST_OUTPUT_PATH", "")
-            _out_display = _host_out if _host_out else str(Path("output").resolve())
+            _out_display = _host_out if _host_out else str(_hc_output_dir())
             if st.button(_t("hc_open_folder", _lang), key="hc_open_folder_btn", use_container_width=True):
-                st.info(f"📁 **Output 文件夹路径：**\n\n`{_out_display}`\n\n→ Finder 按 **Cmd+Shift+G** 粘贴路径即可跳转")
+                opened = _open_in_file_manager(_out_display)
+                if opened:
+                    st.success(f"📁 已打开：`{_out_display}`")
+                else:
+                    st.info(f"📁 **Output 文件夹路径：**\n\n`{_out_display}`")
 
         results = st.session_state.hc_results
         cols_per_row = 2
